@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mailviewer — read any email file, without uploading it</title>
+    <meta
+      name="description"
+      content="Open .eml, .msg, .mbox and .pst files in your browser. Nothing is uploaded: the page is served with connect-src 'none', so it physically cannot send your mail anywhere. Verify it yourself in DevTools."
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      Mailviewer parses mail files locally in your browser, so it needs
+      JavaScript. That same design is why it never uploads anything.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

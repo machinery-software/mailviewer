@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mailviewer",
+  "compatibility_date": "2026-07-14",
+
+  // Static assets only. There is deliberately no "main" field, which means
+  // there is no Worker script: Cloudflare serves the files in ./dist directly
+  // from its edge cache. No server-side code runs on any request, so there is
+  // no server-side code that *could* receive your mail even in principle.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+
+  "observability": {
+    // Nothing to observe: no Worker code, no logs about your usage.
+    "enabled": false
+  }
+}

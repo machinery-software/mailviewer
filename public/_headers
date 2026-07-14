@@ -1,0 +1,32 @@
+/*
+  # ---------------------------------------------------------------------------
+  # The Content-Security-Policy below is the load-bearing privacy guarantee of
+  # this application. It is not decoration. Read it and check it in DevTools.
+  #
+  #   default-src 'self'      Only files served from this origin may load.
+  #   connect-src 'none'      fetch(), XMLHttpRequest, WebSocket, EventSource
+  #                           and navigator.sendBeacon are ALL blocked by the
+  #                           browser. Not "not used" -- structurally impossible.
+  #                           This is the line that makes exfiltration a browser
+  #                           error rather than a promise we ask you to trust.
+  #   img-src 'self' data: blob:
+  #                           Images embedded in your mail render fine (they are
+  #                           decoded to data:/blob: URLs locally), but a remote
+  #                           tracking pixel in a message CANNOT phone home.
+  #   frame-src 'self' blob:  Message bodies render in a sandboxed local iframe.
+  #   form-action 'none'      A phishing form inside a message cannot submit.
+  #   object-src 'none'       No Flash/applet/plugin escape hatches.
+  #   base-uri 'none'         No <base> tag rewriting of relative URLs.
+  # ---------------------------------------------------------------------------
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'self' blob:; child-src 'self' blob:; worker-src 'self' blob:; form-action 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; upgrade-insecure-requests
+
+  # No referrer ever leaves the browser, for any reason.
+  Referrer-Policy: no-referrer
+
+  # Deny every powerful browser API we do not use. Belt and braces alongside CSP.
+  Permissions-Policy: accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), display-capture=(), document-domain=(), encrypted-media=(), geolocation=(), gyroscope=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), interest-cohort=(), browsing-topics=()
+
+  X-Content-Type-Options: nosniff
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains

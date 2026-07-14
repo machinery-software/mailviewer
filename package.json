@@ -1,0 +1,31 @@
+{
+  "name": "mailviewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-only email viewer. Your messages never leave your browser.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7",
+    "wrangler": "^4.110.0"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.12",
+    "postal-mime": "^2.7.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}
