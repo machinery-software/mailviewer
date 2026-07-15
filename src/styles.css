@@ -127,6 +127,109 @@ kbd {
   background: var(--slate-800);
 }
 
+/* --------------------------------------------------------- friendly tool hero */
+
+.hero2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 56px;
+  align-items: center;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 76px 24px 60px;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 18px;
+}
+
+.hero2 h1 {
+  font-family: var(--mono);
+  font-size: clamp(32px, 4.6vw, 50px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  font-weight: 600;
+  margin: 0;
+  color: var(--bone);
+}
+
+.hero2 .lede {
+  color: var(--muted);
+  font-size: 17px;
+  max-width: 50ch;
+  margin: 22px 0 0;
+}
+.hero2 .lede b { color: var(--bone); font-weight: 600; }
+
+.privacy-chip {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 26px;
+  padding: 14px 16px;
+  border: 1px solid var(--teal-dim);
+  background: rgba(45, 212, 191, 0.05);
+  border-radius: var(--r);
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 52ch;
+}
+.privacy-chip .lock { font-size: 16px; line-height: 1.5; }
+.privacy-chip b { color: var(--bone); }
+
+/* The hero drop area -- the thing that makes the page read as a tool. */
+.bigdrop {
+  border: 1.5px dashed var(--slate-600);
+  border-radius: 14px;
+  background: var(--slate-850);
+  padding: 44px 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.bigdrop:hover { border-color: var(--slate-600); background: var(--slate-800); }
+.bigdrop.over { border-color: var(--amber); background: rgba(255, 176, 32, 0.06); transform: translateY(-1px); }
+.bigdrop:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.bigdrop-icon { margin-bottom: 14px; }
+.bigdrop-title { font-family: var(--mono); font-size: 18px; color: var(--bone); letter-spacing: -0.02em; }
+.bigdrop-sub { font-size: 13px; color: var(--dim); margin-top: 7px; }
+.hero2-note { text-align: center; font-size: 12px; color: var(--dim); margin-top: 14px; font-family: var(--mono); }
+
+.privacy-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 26px;
+}
+.pcard { background: var(--slate-850); padding: 20px 18px; }
+.pcard-h { font-family: var(--mono); font-size: 15px; color: var(--teal); letter-spacing: -0.01em; margin-bottom: 8px; }
+.pcard p { font-size: 13px; color: var(--muted); margin: 0; }
+
+.privacy-links { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+
+.prose-block { margin-top: 28px; }
+.prose-block h4 {
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--bone);
+  letter-spacing: -0.01em;
+  margin: 26px 0 8px;
+}
+.prose-block p { color: var(--muted); margin: 0; max-width: 70ch; }
+
+@media (max-width: 900px) {
+  .hero2 { grid-template-columns: 1fr; gap: 32px; padding-top: 44px; }
+}
+
 /* ------------------------------------------------------- the header-block hero */
 
 .hero {
@@ -516,12 +619,65 @@ pre.code .hl { color: var(--teal); }
 
 /* --------------------------------------------------------------- viewer panes */
 
+.viewer-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.viewer-wrap.drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--amber);
+  background: rgba(255, 176, 32, 0.05);
+  pointer-events: none;
+  z-index: 5;
+}
+.drop-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--amber);
+  color: #1a1204;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: var(--r);
+  pointer-events: none;
+  z-index: 6;
+}
+
 .viewer {
   display: grid;
   grid-template-columns: 232px 340px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   height: calc(100vh - 57px);
+}
+
+.pane-add {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.pane-add:hover:not(:disabled) { color: var(--bone); border-color: var(--slate-600); background: var(--slate-800); }
+.pane-add:disabled { opacity: 0.5; }
+
+.pane-progress {
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--amber);
+  border-bottom: 1px solid var(--line);
 }
 
 .pane { min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); }

@@ -1,66 +1,98 @@
-import NetworkMonitor from "./NetworkMonitor";
+import { useRef, useState } from "react";
+import { setPendingFiles } from "../lib/pendingFiles";
+import { SOURCE_URL } from "../config";
 
 const FORMATS = [
   { ext: ".eml", name: "Standard email", note: "RFC 5322 / MIME. What most clients export." },
-  { ext: ".emlx", name: "Apple Mail", note: "The same message, wrapped in Apple's byte-count header." },
-  { ext: ".msg", name: "Outlook message", note: "Compound-file MAPI. Read without owning Outlook." },
-  { ext: ".oft", name: "Outlook template", note: "The same compound file as a .msg, saved as a form." },
-  { ext: ".mbox", name: "Mail archive", note: "Gmail Takeout, Thunderbird. Thousands of messages in one file." },
-  { ext: ".pst / .ost", name: "Outlook data file", note: "The whole mailbox, folder tree intact." },
-  { ext: ".olm", name: "Outlook for Mac", note: "A zipped archive. The folder tree is rebuilt from it." },
-  { ext: ".mht", name: "Saved web archive", note: "MHTML from a browser or Word. Inline images resolve." },
+  { ext: ".msg", name: "Outlook message", note: "Read one without owning Outlook." },
+  { ext: ".pst / .ost", name: "Outlook data file", note: "A whole mailbox, folder tree intact." },
+  { ext: ".mbox", name: "Mail archive", note: "Gmail Takeout, Thunderbird, Apple Mail." },
+  { ext: ".olm", name: "Outlook for Mac", note: "The Mac export archive, unzipped for you." },
+  { ext: ".emlx", name: "Apple Mail", note: "A single message saved by Mail.app." },
+  { ext: ".oft", name: "Outlook template", note: "The template form, read as a message." },
+  { ext: ".mht", name: "Saved web archive", note: "MHTML, with inline images resolved." },
 ];
 
+const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,message/rfc822";
+
 export default function Landing() {
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Files chosen here are handed to the viewer route, which does the reading.
+  const open = (files: File[]) => {
+    if (!files.length) return;
+    setPendingFiles(files);
+    location.hash = "#/open";
+  };
+
   return (
     <>
-      <section className="hero">
-        <div>
-          {/*
-            The hero is a header block, because a header block is the artifact
-            this product exists to handle. The claims are stated in the format
-            they describe.
-          */}
-          <div className="headerblock">
-            <div className="hb-row">
-              <span className="hb-key">X-Processing:</span>
-              <span className="hb-val verified">local — in this browser tab</span>
-            </div>
-            <div className="hb-row">
-              <span className="hb-key">X-Uploads:</span>
-              <span className="hb-val verified">none, and none are possible</span>
-            </div>
-            <div className="hb-row">
-              <span className="hb-key">X-Enforced-By:</span>
-              <span className="hb-val">Content-Security-Policy: connect-src 'none'</span>
-            </div>
-          </div>
-
+      <section className="hero2">
+        <div className="hero2-copy">
+          <div className="eyebrow">Email viewer · runs in your browser</div>
           <h1>
-            Read any email file.
+            Open any email file.
             <br />
-            It <span className="em">never leaves</span> your browser.
+            Read it right here.
           </h1>
-
           <p className="lede">
-            Drop in an Outlook, Apple Mail, or Gmail export — .eml, .msg, .mbox, .pst and
-            more — and read it: headers, HTML, attachments, folder tree and all. The file is
-            opened by JavaScript on your own machine. Nothing is uploaded, because this page
-            is served with a policy that makes uploading impossible.
+            Drag in an export from Outlook, Apple Mail or Gmail — <b>.eml</b>, <b>.msg</b>,{" "}
+            <b>.pst</b>, <b>.mbox</b> and more — and read it like a mail app: folders, threads,
+            attachments and all. Open as many files as you like and browse across them together.
           </p>
 
-          <div className="hero-cta">
-            <a className="btn btn-primary" href="#/open">
-              Open a file
-            </a>
-            <a className="btn" href="#/verify">
-              Prove it to me
-            </a>
+          <div className="privacy-chip">
+            <span className="lock" aria-hidden="true">🔒</span>
+            <span>
+              <b>Private by design.</b> Your files are opened on your own device and never
+              uploaded. <a href="#/privacy">See how it works →</a>
+            </span>
           </div>
         </div>
 
-        <div>
-          <NetworkMonitor />
+        <div className="hero2-drop">
+          <div
+            className={`bigdrop ${dragOver ? "over" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              open([...e.dataTransfer.files]);
+            }}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+            }}
+          >
+            <div className="bigdrop-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="48" height="48">
+                <rect x="7" y="12" width="34" height="24" rx="3" fill="none" stroke="var(--teal)" strokeWidth="2.4" />
+                <path d="M7 14l17 13 17-13" fill="none" stroke="var(--teal)" strokeWidth="2.4" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div className="bigdrop-title">Drop email files here</div>
+            <div className="bigdrop-sub">or click to choose — you can pick several</div>
+            <input
+              ref={inputRef}
+              type="file"
+              hidden
+              multiple
+              accept={ACCEPT}
+              onChange={(e) => {
+                const files = [...(e.target.files ?? [])];
+                e.target.value = "";
+                open(files);
+              }}
+            />
+          </div>
+          <div className="hero2-note">Nothing leaves this page. No upload, no account, no waiting.</div>
         </div>
       </section>
 
@@ -70,8 +102,9 @@ export default function Landing() {
         <h2>Formats</h2>
         <h3>Every mail file you're likely to be handed</h3>
         <p>
-          Files are identified by their contents, not their extension — so a .msg that
-          someone renamed to .eml still opens correctly.
+          Files are identified by their contents, not their extension — so a .msg that someone
+          renamed to .eml still opens correctly. Notes files (.nsf) and Outlook Express (.dbx)
+          are recognised too, with a note on how to convert them.
         </p>
 
         <div className="formats">
@@ -88,82 +121,45 @@ export default function Landing() {
       <hr className="rule" />
 
       <section className="section">
-        <h2>Why this is safe</h2>
-        <h3>The guarantee is structural, not a promise</h3>
+        <h2>Privacy</h2>
+        <h3>Your mail stays yours</h3>
         <p>
-          Most "private" web tools ask you to trust that their server deletes your data.
-          This one has no server to send anything to. There is no backend, no API, no
-          upload endpoint, and no analytics. The site is a folder of static files.
+          This is a viewer, not a service. It has no account to create and no server to upload
+          to — the page is a set of static files, and your mail is read entirely by code running
+          in this tab.
         </p>
 
-        <div className="steps" style={{ counterReset: "none" }}>
-          <div className="step" style={{ gridTemplateColumns: "1fr" }}>
-            <div>
-              <h4>The browser refuses to let this page open a connection</h4>
-              <p>
-                Every response is served with{" "}
-                <code>Content-Security-Policy: … connect-src 'none'</code>. That directive
-                tells your browser to block <code>fetch()</code>,{" "}
-                <code>XMLHttpRequest</code>, WebSockets, <code>EventSource</code> and{" "}
-                <code>sendBeacon</code> — every mechanism a page has for talking to a
-                server. Not "we choose not to use them". The browser will not permit them.
-              </p>
-              <p>
-                So even if this app were malicious, or a dependency were compromised
-                tomorrow, the code still could not send your mail anywhere. The enforcement
-                happens in your browser, not in our code.
-              </p>
-            </div>
+        <div className="privacy-cards">
+          <div className="pcard">
+            <div className="pcard-h">Nothing is uploaded</div>
+            <p>Your files are read locally. They never travel to us or anyone else.</p>
           </div>
-
-          <div className="step" style={{ gridTemplateColumns: "1fr" }}>
-            <div>
-              <h4>Tracking pixels in your mail are dead on arrival</h4>
-              <p>
-                Marketing email is full of 1×1 images that tell the sender you opened the
-                message. Because <code>img-src</code> is restricted to this origin, those
-                images cannot load — the viewer shows you how many it neutralised, and who
-                was trying to phone home.
-              </p>
-            </div>
+          <div className="pcard">
+            <div className="pcard-h">No tracking</div>
+            <p>No analytics, no accounts, no cookies. Tracking pixels in your mail are blocked.</p>
           </div>
-
-          <div className="step" style={{ gridTemplateColumns: "1fr" }}>
-            <div>
-              <h4>Even the host's own analytics can't get through</h4>
-              <p>
-                Hosting platforms sometimes inject an analytics beacon into a page at their
-                edge, after our code has run. This one's CSP refuses it: you may see a{" "}
-                <em>blocked</em> request to an analytics host in the live monitor, and that's
-                the browser turning it away before a byte is sent. We show it on purpose —
-                it's the same refusal that stops the app itself from phoning home.
-              </p>
-            </div>
-          </div>
-
-          <div className="step" style={{ gridTemplateColumns: "1fr" }}>
-            <div>
-              <h4>It works with your network turned off</h4>
-              <p>
-                The strongest test we can offer: load the page, go offline, and open your
-                mail anyway. If the app needed a server, it would break. It doesn't.
-              </p>
-            </div>
+          <div className="pcard">
+            <div className="pcard-h">You can prove it</div>
+            <p>The browser itself enforces this, and you can confirm it in DevTools in a minute.</p>
           </div>
         </div>
 
-        <div className="callout">
-          <strong>Don't trust any of that.</strong> Every claim on this page is checkable in
-          about ninety seconds with the DevTools you already have.{" "}
-          <a href="#/verify">Here's exactly how →</a>
+        <div className="privacy-links">
+          <a className="btn" href="#/privacy">
+            How your privacy is protected
+          </a>
+          <a className="btn" href="#/verify">
+            Verify it yourself
+          </a>
         </div>
       </section>
 
       <footer className="footer">
         <div className="footer-inner">
           <span>Mailviewer — a static site. No server, no accounts, no analytics.</span>
+          <a href="#/privacy">Privacy</a>
           <a href="#/verify">Verify</a>
-          <a href="https://github.com/dminnema/mailviewer" target="_blank" rel="noopener noreferrer">
+          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
             Source
           </a>
         </div>

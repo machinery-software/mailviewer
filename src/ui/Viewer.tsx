@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { Folder, Message, ParsedArchive, ParseProgress } from "../lib/model";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Folder, Message, ParseProgress, ParsedArchive } from "../lib/model";
 import { parseFile } from "../lib/parseClient";
+import { namespaceArchive } from "../lib/combine";
+import { takePendingFiles } from "../lib/pendingFiles";
 import MessageView from "./MessageView";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
@@ -18,55 +20,93 @@ function formatDate(d: Date | null): string {
   });
 }
 
+const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,message/rfc822";
+
+interface FileError {
+  name: string;
+  message: string;
+}
+
 export default function Viewer() {
-  const [archive, setArchive] = useState<ParsedArchive | null>(null);
+  // Every opened file becomes one archive, id-namespaced so they can share a
+  // view. Files accumulate -- opening a second one adds to the first.
+  const [archives, setArchives] = useState<ParsedArchive[]>([]);
   const [progress, setProgress] = useState<ParseProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [progressName, setProgressName] = useState<string>("");
+  const [errors, setErrors] = useState<FileError[]>([]);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [messageId, setMessageId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const nextKey = useRef(0);
+  const busy = useRef(false);
 
-  const load = useCallback(async (file: File) => {
-    setError(null);
-    setArchive(null);
-    setMessageId(null);
-    setProgress({ phase: "Opening", fraction: null, messagesFound: 0 });
+  const loadFiles = useCallback(async (files: File[]) => {
+    if (busy.current || files.length === 0) return;
+    busy.current = true;
+    setErrors([]);
 
-    try {
-      const { promise } = parseFile(file, setProgress);
-      const result = await promise;
-      setArchive(result);
-      setFolderId(result.root.id);
-      setMessageId(result.messages[0]?.id ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setProgress(null);
+    for (const file of files) {
+      setProgressName(file.name);
+      setProgress({ phase: "Opening", fraction: null, messagesFound: 0 });
+      try {
+        const { promise } = parseFile(file, setProgress);
+        const result = await promise;
+        const key = `f${nextKey.current++}`;
+        const ns = namespaceArchive(result, key);
+        setArchives((prev) => [...prev, ns]);
+        // Jump to the file we just opened, so a drop always shows its result.
+        setFolderId(ns.root.id);
+        setMessageId(ns.messages[0]?.id ?? null);
+      } catch (err) {
+        setErrors((prev) => [
+          ...prev,
+          { name: file.name, message: err instanceof Error ? err.message : String(err) },
+        ]);
+      }
     }
+
+    setProgress(null);
+    busy.current = false;
   }, []);
 
+  // Files chosen on the landing hero are handed over here on first mount.
+  useEffect(() => {
+    const pending = takePendingFiles();
+    if (pending.length) void loadFiles(pending);
+  }, [loadFiles]);
+
   const folders = useMemo(
-    () => (archive ? flattenFolders(archive.root) : []),
-    [archive],
+    () => archives.flatMap((a) => flattenFolders(a.root)),
+    [archives],
   );
 
   const byId = useMemo(() => {
     const m = new Map<string, Message>();
-    for (const msg of archive?.messages ?? []) m.set(msg.id, msg);
+    for (const a of archives) for (const msg of a.messages) m.set(msg.id, msg);
     return m;
-  }, [archive]);
+  }, [archives]);
+
+  const warningCount = useMemo(
+    () => archives.reduce((n, a) => n + a.warnings.length, 0),
+    [archives],
+  );
 
   const visible = useMemo(() => {
-    if (!archive) return [];
-    const folder = folders.find((f) => f.folder.id === folderId)?.folder ?? archive.root;
-
-    // A folder shows its own messages plus everything beneath it, which is what
-    // people expect when they click a parent in a mail client.
-    const ids = new Set<string>();
-    for (const { folder: f } of flattenFolders(folder)) {
-      for (const id of f.messageIds) ids.add(id);
+    // folderId null means "everything, across every open file".
+    let ids: Iterable<string>;
+    if (folderId === null) {
+      ids = byId.keys();
+    } else {
+      const folder = folders.find((f) => f.folder.id === folderId)?.folder;
+      if (!folder) return [];
+      const set = new Set<string>();
+      // A folder shows its own messages plus everything beneath it.
+      for (const { folder: f } of flattenFolders(folder)) {
+        for (const id of f.messageIds) set.add(id);
+      }
+      ids = set;
     }
 
     let list = [...ids].map((id) => byId.get(id)).filter((m): m is Message => !!m);
@@ -89,25 +129,59 @@ export default function Viewer() {
     }
 
     return list.sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
-  }, [archive, folders, folderId, byId, query]);
+  }, [folders, folderId, byId, query]);
 
   const selected = messageId ? byId.get(messageId) ?? null : null;
 
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) void load(file);
-  }
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const files = [...e.dataTransfer.files];
+      if (files.length) void loadFiles(files);
+    },
+    [loadFiles],
+  );
 
-  if (!archive) {
+  const pickFiles = () => inputRef.current?.click();
+
+  const hiddenInput = (
+    <input
+      ref={inputRef}
+      type="file"
+      hidden
+      multiple
+      accept={ACCEPT}
+      onChange={(e) => {
+        const files = [...(e.target.files ?? [])];
+        // Reset so re-choosing the same file still fires a change event.
+        e.target.value = "";
+        if (files.length) void loadFiles(files);
+      }}
+    />
+  );
+
+  const progressBlock = progress && (
+    <div className="progress">
+      <div>
+        Opening {progressName} · {progress.phase}
+        {progress.messagesFound > 0 && ` · ${progress.messagesFound.toLocaleString()} messages`}
+      </div>
+      <div className={`bar ${progress.fraction === null ? "indet" : ""}`}>
+        <i style={progress.fraction !== null ? { width: `${progress.fraction * 100}%` } : undefined} />
+      </div>
+    </div>
+  );
+
+  // ---- empty state: the first-file dropzone --------------------------------
+  if (archives.length === 0) {
     return (
       <section className="section section-narrow" style={{ width: "100%" }}>
         <h2>Open</h2>
         <h3>Choose a mail file</h3>
         <p>
-          It is read by JavaScript in this tab. It is not uploaded — open DevTools and watch
-          the Network panel stay silent while you do this.
+          It's read by JavaScript in this tab and never uploaded. You can open several files —
+          each one is added to the list, so you can read across all of them at once.
         </p>
 
         <div
@@ -120,63 +194,86 @@ export default function Viewer() {
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
         >
-          <h3>Drop a file here</h3>
+          <h3>Drop files here</h3>
           <p>.eml · .emlx · .msg · .oft · .mbox · .pst · .ost · .olm · .mht</p>
-
-          <input
-            ref={inputRef}
-            type="file"
-            hidden
-            accept=".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,message/rfc822"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void load(f);
-            }}
-          />
-
-          <button
-            className="btn btn-primary"
-            onClick={() => inputRef.current?.click()}
-            disabled={!!progress}
-          >
-            Choose a file
+          {hiddenInput}
+          <button className="btn btn-primary" onClick={pickFiles} disabled={!!progress}>
+            Choose files
           </button>
-
-          {progress && (
-            <div className="progress">
-              <div>
-                {progress.phase}
-                {progress.messagesFound > 0 && ` · ${progress.messagesFound.toLocaleString()} messages`}
-              </div>
-              <div className={`bar ${progress.fraction === null ? "indet" : ""}`}>
-                <i style={progress.fraction !== null ? { width: `${progress.fraction * 100}%` } : undefined} />
-              </div>
-            </div>
-          )}
+          {progressBlock}
         </div>
 
-        {error && (
+        {errors.length > 0 && (
           <div className="callout bad">
-            <strong>Couldn't open that file.</strong> {error}
+            <strong>Couldn't open {errors.length === 1 ? "that file" : "some files"}.</strong>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+              {errors.map((e, i) => (
+                <li key={i}>
+                  {e.name}: {e.message}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </section>
     );
   }
 
+  // ---- loaded state: the three-pane viewer ---------------------------------
+  const showAllRow = archives.length > 1;
+
   return (
-    <>
-      {archive.warnings.length > 0 && (
+    <div
+      className={`viewer-wrap ${dragOver ? "drop-target" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        // Only clear when the cursor actually leaves the wrapper, not on every
+        // child boundary crossed on the way across the pane.
+        if (e.currentTarget === e.target) setDragOver(false);
+      }}
+      onDrop={onDrop}
+    >
+      {(warningCount > 0 || errors.length > 0) && (
         <div className="warnbar">
-          Opened with {archive.warnings.length.toLocaleString()}{" "}
-          {archive.warnings.length === 1 ? "problem" : "problems"} — some messages in this
-          archive are damaged and were skipped. The rest are shown below.
+          {warningCount > 0 && (
+            <>
+              Opened with {warningCount.toLocaleString()}{" "}
+              {warningCount === 1 ? "problem" : "problems"} — some messages were damaged and
+              skipped.{" "}
+            </>
+          )}
+          {errors.map((e) => `${e.name} could not be opened.`).join(" ")}
         </div>
       )}
 
       <div className="viewer">
         <aside className="pane">
-          <div className="pane-head">Folders</div>
+          <div className="pane-head">
+            <span>Files</span>
+            {hiddenInput}
+            <button className="pane-add" onClick={pickFiles} title="Open more files" disabled={!!progress}>
+              ＋ Add
+            </button>
+          </div>
+
+          {progress && <div className="pane-progress">Opening {progressName}…</div>}
+
+          {showAllRow && (
+            <button
+              className={`folder ${folderId === null ? "active" : ""}`}
+              onClick={() => {
+                setFolderId(null);
+                setMessageId(null);
+              }}
+            >
+              <span>All messages</span>
+              <span className="folder-count">{byId.size}</span>
+            </button>
+          )}
+
           {folders.map(({ folder, depth }) => (
             <button
               key={folder.id}
@@ -240,6 +337,8 @@ export default function Viewer() {
           )}
         </main>
       </div>
-    </>
+
+      {dragOver && <div className="drop-hint">Drop to add more files</div>}
+    </div>
   );
 }
