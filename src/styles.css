@@ -568,8 +568,23 @@ pre.code .hl { color: var(--teal); }
   margin-top: auto;
   background: var(--slate-850);
 }
-.footer-inner { max-width: 1180px; margin: 0 auto; display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
+.footer-inner { max-width: 1180px; margin: 0 auto; display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
 .footer a { color: var(--muted); }
+.footer a:hover { color: var(--bone); }
+.footer-note { color: var(--dim); }
+.footer-links { display: flex; gap: 18px; }
+/* The maintainer attribution sits at the far right and is the emphasis here. */
+.footer-attr { margin-left: auto; color: var(--dim); }
+.footer-attr a { color: var(--teal); text-decoration-color: var(--teal-dim); }
+.footer-attr a:hover { color: var(--teal); }
+
+@media (max-width: 560px) {
+  .footer-attr { margin-left: 0; }
+}
+
+.hero2-byline { color: var(--dim); font-size: 13px; margin: 18px 0 0; }
+.hero2-byline a { color: var(--muted); }
+.hero2-byline a:hover { color: var(--bone); }
 
 /* ------------------------------------------------------------------- dropzone */
 

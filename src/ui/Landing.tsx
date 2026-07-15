@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { setPendingFiles } from "../lib/pendingFiles";
-import { SOURCE_URL } from "../config";
+import { COMPANY_NAME, COMPANY_URL } from "../config";
+import { Footer } from "./Footer";
 
 const FORMATS = [
   { ext: ".eml", name: "Standard email", note: "RFC 5322 / MIME. What most clients export." },
@@ -49,6 +50,14 @@ export default function Landing() {
               uploaded. <a href="#/privacy">See how it works →</a>
             </span>
           </div>
+
+          <p className="hero2-byline">
+            A free tool, built and maintained by{" "}
+            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">
+              {COMPANY_NAME}
+            </a>
+            .
+          </p>
         </div>
 
         <div className="hero2-drop">
@@ -154,16 +163,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="footer">
-        <div className="footer-inner">
-          <span>Mailviewer — a static site. No server, no accounts, no analytics.</span>
-          <a href="#/privacy">Privacy</a>
-          <a href="#/verify">Verify</a>
-          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-            Source
-          </a>
-        </div>
-      </footer>
+      <Footer note="A static site. No server, no accounts, no analytics." />
     </>
   );
 }

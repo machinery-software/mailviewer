@@ -1,5 +1,6 @@
 import NetworkMonitor from "./NetworkMonitor";
 import { SOURCE_URL } from "../config";
+import { Footer } from "./Footer";
 
 export default function Privacy() {
   return (
@@ -103,15 +104,7 @@ export default function Privacy() {
         </div>
       </section>
 
-      <footer className="footer">
-        <div className="footer-inner">
-          <span>Found a way to make this page leak data? That's a bug — please report it.</span>
-          <a href="#/verify">Verify</a>
-          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-            Source
-          </a>
-        </div>
-      </footer>
+      <Footer note="Found a way to make this page leak data? That's a bug — please report it." />
     </>
   );
 }

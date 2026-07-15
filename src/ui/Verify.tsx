@@ -1,7 +1,7 @@
 import { useState } from "react";
 import NetworkMonitor from "./NetworkMonitor";
 import { attemptExfiltration, type ExfilTestResult } from "../lib/netguard";
-import { SOURCE_URL } from "../config";
+import { Footer } from "./Footer";
 
 export default function Verify() {
   const [result, setResult] = useState<ExfilTestResult | null>(null);
@@ -208,14 +208,7 @@ export default function Verify() {
         </div>
       </section>
 
-      <footer className="footer">
-        <div className="footer-inner">
-          <span>Found a way to make this page leak data? That's a security bug — please report it.</span>
-          <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-            Source
-          </a>
-        </div>
-      </footer>
+      <Footer note="Found a way to make this page leak data? That's a security bug — please report it." />
     </>
   );
 }
