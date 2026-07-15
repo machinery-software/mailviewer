@@ -10,6 +10,13 @@ describe("detectFormat", () => {
     expect(detectFormat(cfb, "invoice.eml")).toBe("msg");
   });
 
+  it("identifies a bare winmail.dat by its TNEF signature", () => {
+    const tnef = new Uint8Array([0x78, 0x9f, 0x3e, 0x22, 0x09, 0x00, 0x01]);
+    expect(detectFormat(tnef, "winmail.dat")).toBe("tnef");
+    // ...and even when someone has renamed it to something friendlier.
+    expect(detectFormat(tnef, "attachment.bin")).toBe("tnef");
+  });
+
   it("distinguishes .pst from .ost only by name, since the headers are identical", () => {
     const pst = enc("!BDN\x00\x00\x00\x00");
     expect(detectFormat(pst, "archive.pst")).toBe("pst");

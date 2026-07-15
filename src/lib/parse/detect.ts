@@ -2,6 +2,7 @@ import type { SourceFormat } from "../model";
 
 const CFB_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const PST_MAGIC = [0x21, 0x42, 0x44, 0x4e]; // "!BDN"
+const TNEF_MAGIC = [0x78, 0x9f, 0x3e, 0x22]; // 0x223E9F78, little-endian
 
 function startsWith(bytes: Uint8Array, magic: number[]): boolean {
   if (bytes.length < magic.length) return false;
@@ -19,6 +20,9 @@ function startsWith(bytes: Uint8Array, magic: number[]): boolean {
  */
 export function detectFormat(head: Uint8Array, filename: string): SourceFormat {
   if (startsWith(head, CFB_MAGIC)) return "msg";
+  // A bare winmail.dat. Normally TNEF arrives as an attachment inside an .eml
+  // and is expanded there, but people do save the thing to disk and open it.
+  if (startsWith(head, TNEF_MAGIC)) return "tnef";
   if (startsWith(head, PST_MAGIC)) {
     return filename.toLowerCase().endsWith(".ost") ? "ost" : "pst";
   }

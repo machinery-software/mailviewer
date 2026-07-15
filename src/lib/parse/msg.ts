@@ -318,8 +318,11 @@ export function decodeGuid(b: Uint8Array): string {
  * Turn the bytes of a `__substg1.0_*` stream into a value, given its type.
  * Multi-valued types are handled by the caller, which gathers the elements
  * first; this function only ever sees one element's worth of bytes.
+ *
+ * Exported because TNEF (`./tnef.ts`) serialises the same MAPI value types in a
+ * different container: the container differs, the types do not.
  */
-function decodeScalar(
+export function decodeScalar(
   type: number,
   bytes: Uint8Array,
   codepage: number,
@@ -969,7 +972,7 @@ const MIME_BY_EXT: Record<string, string> = {
   msg: "application/vnd.ms-outlook",
 };
 
-function guessMimeType(filename: string): string {
+export function guessMimeType(filename: string): string {
   const dot = filename.lastIndexOf(".");
   if (dot < 0) return "application/octet-stream";
   const ext = filename.slice(dot + 1).toLowerCase();

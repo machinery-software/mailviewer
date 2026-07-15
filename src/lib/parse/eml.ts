@@ -1,6 +1,7 @@
 import PostalMime from "postal-mime";
 import type { Address, Attachment, Message, ParsedArchive } from "../model";
 import { singleMessageArchive } from "./archive";
+import { extractTnefAttachments } from "./tnef";
 
 /**
  * Apple Mail's .emlx wraps a plain RFC822 message in a byte-count prefix line
@@ -31,12 +32,89 @@ function toAddresses(list: Array<{ address?: string | null; name?: string | null
   return list.map(toAddress).filter((a): a is Address => !!a);
 }
 
-/** Parse one RFC822/MIME message into the common model. */
+/**
+ * True for the attachment Outlook produces when it gives up on MIME: a TNEF
+ * blob. The MIME type is the reliable signal, but plenty of gateways strip it
+ * down to application/octet-stream and leave only the name behind.
+ */
+function isTnefPart(a: Attachment): boolean {
+  const mime = a.mimeType.toLowerCase().split(";")[0].trim();
+  return (
+    mime === "application/ms-tnef" ||
+    mime === "application/vnd.ms-tnef" ||
+    a.filename.toLowerCase() === "winmail.dat"
+  );
+}
+
+/**
+ * Expand any winmail.dat part in place: the real attachments it was carrying
+ * take its position in the list, and its body -- which is the *only* copy of
+ * the formatted body when Outlook has done this -- fills in for a message that
+ * has none.
+ *
+ * A user with a winmail.dat should never see a winmail.dat. But if expansion
+ * fails, the opaque part stays exactly where it was: an attachment they can
+ * download and take elsewhere beats an attachment we quietly deleted.
+ */
+function expandTnefParts(message: Message, warnings: string[]): void {
+  if (!message.attachments.some(isTnefPart)) return;
+
+  const expanded: Attachment[] = [];
+  let changed = false;
+
+  for (const att of message.attachments) {
+    if (!isTnefPart(att)) {
+      expanded.push(att);
+      continue;
+    }
+    try {
+      const tnef = extractTnefAttachments(att.content);
+      for (const w of tnef.warnings) warnings.push(`${att.filename}: ${w}`);
+
+      const gainsBody = (!message.html && !!tnef.html) || (!message.text && !!tnef.text);
+      if (tnef.attachments.length === 0 && !gainsBody) {
+        // Nothing inside worth trading the original for.
+        warnings.push(
+          `${att.filename}: TNEF part contained no attachments or body; left as-is.`,
+        );
+        expanded.push(att);
+        continue;
+      }
+
+      if (!message.html && tnef.html) message.html = tnef.html;
+      if (!message.text && tnef.text) message.text = tnef.text;
+
+      tnef.attachments.forEach((inner, i) => {
+        expanded.push({ ...inner, id: `${att.id}:tnef:${i}` });
+      });
+      changed = true;
+    } catch (err) {
+      warnings.push(
+        `${att.filename}: TNEF attachment could not be expanded (${
+          err instanceof Error ? err.message : String(err)
+        }); it is still available as a download.`,
+      );
+      expanded.push(att);
+    }
+  }
+
+  if (!changed) return;
+  message.attachments = expanded;
+  message.flags.hasAttachments = expanded.some((a) => !a.inline);
+}
+
+/**
+ * Parse one RFC822/MIME message into the common model.
+ *
+ * `warnings`, when given, collects non-fatal problems (currently: a winmail.dat
+ * part that would not expand) for the archive to report.
+ */
 export async function parseEmlMessage(
   bytes: Uint8Array,
   id: string,
   folderPath: string[],
   format: "eml" | "emlx" | "mbox",
+  warnings: string[] = [],
 ): Promise<Message> {
   const source = format === "emlx" ? stripEmlxWrapper(bytes) : bytes;
 
@@ -73,7 +151,7 @@ export async function parseEmlMessage(
     .map((r) => r.trim())
     .filter(Boolean);
 
-  return {
+  const message: Message = {
     id,
     format,
     subject: email.subject || "(no subject)",
@@ -97,6 +175,10 @@ export async function parseEmlMessage(
       hasAttachments: attachments.some((a) => !a.inline),
     },
   };
+
+  expandTnefParts(message, warnings);
+
+  return message;
 }
 
 export async function parseEml(
@@ -104,6 +186,7 @@ export async function parseEml(
   name: string,
   format: "eml" | "emlx" = "eml",
 ): Promise<ParsedArchive> {
-  const message = await parseEmlMessage(bytes, "msg-0", [name], format);
-  return singleMessageArchive(message, name, format);
+  const warnings: string[] = [];
+  const message = await parseEmlMessage(bytes, "msg-0", [name], format, warnings);
+  return singleMessageArchive(message, name, format, warnings);
 }

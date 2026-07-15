@@ -137,6 +137,7 @@ export async function parseMbox(
         `msg-${i}`,
         [name],
         "mbox",
+        warnings,
       );
       messages.push(message);
     } catch (err) {

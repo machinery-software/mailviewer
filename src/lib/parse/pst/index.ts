@@ -111,6 +111,12 @@ export async function parsePst(
 
   const root: Folder = toFolder(plan, (p) => idsByFolder.get(p) ?? []);
 
+  // The store root is an unnamed container whose child is the real mailbox root
+  // ("Top of Personal Folders"). Left alone, both render with the same fallback
+  // label and the sidebar shows the name twice, nested inside itself. Name the
+  // outer one after the file, which is what every other format's root does.
+  root.name = name;
+
   report("Done", 1);
 
   return { sourceName: name, format, messages, root, warnings };

@@ -7,7 +7,7 @@
  * which format a message came from except to display a badge.
  */
 
-export type SourceFormat = "eml" | "emlx" | "msg" | "mbox" | "pst" | "ost";
+export type SourceFormat = "eml" | "emlx" | "msg" | "mbox" | "pst" | "ost" | "tnef";
 
 export interface Address {
   name?: string;

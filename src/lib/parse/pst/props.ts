@@ -396,6 +396,8 @@ export function hnidIsHid(hnid: number): boolean {
 export const PidTagMessageClass = 0x001a;
 export const PidTagSubject = 0x0037;
 export const PidTagClientSubmitTime = 0x0039;
+/** When the message was created in this store -- NOT when it was sent. Last-resort date. */
+export const PidTagCreationTime = 0x3007;
 export const PidTagSentRepresentingName = 0x0042;
 export const PidTagSentRepresentingAddressType = 0x0064;
 export const PidTagSentRepresentingEmailAddress = 0x0065;

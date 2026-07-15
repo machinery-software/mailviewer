@@ -5,6 +5,7 @@ import { parseEml } from "../lib/parse/eml";
 import { parseMbox } from "../lib/parse/mbox";
 import { parseMsg } from "../lib/parse/msg";
 import { parsePst } from "../lib/parse/pst";
+import { parseTnef } from "../lib/parse/tnef";
 
 /**
  * Parsing happens off the main thread so that a 4 GB PST doesn't freeze the tab.
@@ -48,6 +49,9 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         break;
       case "msg":
         archive = await parseMsg(new Uint8Array(await file.arrayBuffer()), file.name, onProgress);
+        break;
+      case "tnef":
+        archive = await parseTnef(new Uint8Array(await file.arrayBuffer()), file.name, onProgress);
         break;
       case "eml":
       case "emlx":
