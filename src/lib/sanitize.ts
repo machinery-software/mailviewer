@@ -190,6 +190,8 @@ export function buildIframeDocument(bodyHtml: string, darkMode: boolean): string
   table{max-width:100%;}
   blockquote{margin:0 0 0 12px;padding-left:12px;border-left:2px solid ${darkMode ? "#3a3a42" : "#dcdce4"};color:${darkMode ? "#a0a0aa" : "#5a5a68"};}
   pre{white-space:pre-wrap;}
+  /* Search-match highlight injected by highlightHtml(). */
+  mark.mvh{background:#ffb020;color:#1a1204;border-radius:2px;padding:0 1px;}
 </style>
 </head>
 <body>${bodyHtml}</body>

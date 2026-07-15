@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Address, Attachment, Message } from "../lib/model";
 import { buildIframeDocument, sanitizeMessageHtml } from "../lib/sanitize";
+import { countMatches, highlight, highlightHtml } from "../lib/highlight";
 
 type Tab = "message" | "headers" | "source";
 
@@ -49,7 +50,7 @@ function AttachmentChip({ att }: { att: Attachment }) {
   );
 }
 
-export default function MessageView({ message }: { message: Message }) {
+export default function MessageView({ message, query = "" }: { message: Message; query?: string }) {
   const [tab, setTab] = useState<Tab>("message");
 
   useEffect(() => setTab("message"), [message.id]);
@@ -59,10 +60,19 @@ export default function MessageView({ message }: { message: Message }) {
     return sanitizeMessageHtml(message.html, message.attachments);
   }, [message]);
 
-  const srcDoc = useMemo(
-    () => (rendered ? buildIframeDocument(rendered.html, true) : null),
-    [rendered],
+  // Highlight AFTER sanitising, on the sanitiser's output -- see highlightHtml.
+  const highlighted = useMemo(
+    () => (rendered ? highlightHtml(rendered.html, query) : null),
+    [rendered, query],
   );
+
+  const srcDoc = useMemo(
+    () => (highlighted ? buildIframeDocument(highlighted.html, true) : null),
+    [highlighted],
+  );
+
+  // How many times the query appears in whatever body we're actually showing.
+  const bodyMatches = highlighted ? highlighted.count : countMatches(message.text, query);
 
   const files = message.attachments.filter((a) => !a.inline);
   const trackers = rendered?.blockedRemote.filter((b) => b.likelyTracker) ?? [];
@@ -76,7 +86,7 @@ export default function MessageView({ message }: { message: Message }) {
   return (
     <div className="msgview">
       <div className="msghead">
-        <h1>{message.subject}</h1>
+        <h1>{highlight(message.subject, query)}</h1>
 
         <div className="addr-grid">
           <span className="addr-key">From</span>
@@ -140,6 +150,14 @@ export default function MessageView({ message }: { message: Message }) {
         </div>
       </div>
 
+      {tab === "message" && query.trim() && (
+        <div className="match-strip">
+          {bodyMatches > 0
+            ? `${bodyMatches} match${bodyMatches === 1 ? "" : "es"} for “${query.trim()}” in this message`
+            : `No matches for “${query.trim()}” in the body — it matched elsewhere (sender, subject or recipients).`}
+        </div>
+      )}
+
       {tab === "message" && blocked.length > 0 && (
         <div className="blocked-banner">
           <b>
@@ -168,7 +186,7 @@ export default function MessageView({ message }: { message: Message }) {
               srcDoc={srcDoc}
             />
           ) : message.text ? (
-            <pre className="plaintext">{message.text}</pre>
+            <pre className="plaintext">{highlight(message.text, query)}</pre>
           ) : (
             <div className="empty">This message has no readable body.</div>
           )}

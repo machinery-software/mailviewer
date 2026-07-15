@@ -3,6 +3,7 @@ import type { Folder, Message, ParseProgress, ParsedArchive } from "../lib/model
 import { parseFile } from "../lib/parseClient";
 import { namespaceArchive } from "../lib/combine";
 import { takePendingFiles } from "../lib/pendingFiles";
+import { highlight } from "../lib/highlight";
 import MessageView from "./MessageView";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
@@ -317,12 +318,12 @@ export default function Viewer() {
             >
               <div className="msgrow-top">
                 <span className="msgrow-from">
-                  {m.from?.name || m.from?.email || "(unknown sender)"}
+                  {highlight(m.from?.name || m.from?.email || "(unknown sender)", query)}
                 </span>
                 <span className="msgrow-date">{formatDate(m.date)}</span>
               </div>
               <div className="msgrow-subject">
-                {m.subject}
+                {highlight(m.subject, query)}
                 {m.flags.hasAttachments && <span className="msgrow-clip">◍</span>}
               </div>
             </button>
@@ -331,7 +332,7 @@ export default function Viewer() {
 
         <main className="pane">
           {selected ? (
-            <MessageView message={selected} />
+            <MessageView message={selected} query={query} />
           ) : (
             <div className="empty">Select a message.</div>
           )}
