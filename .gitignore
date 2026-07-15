@@ -9,6 +9,13 @@ dist/
 *.eml
 *.emlx
 *.msg
+*.oft
 *.mbox
 *.pst
 *.ost
+*.olm
+*.mht
+*.mhtml
+winmail.dat
+# Scratch files used to drive the browser during testing.
+public/__tmp*

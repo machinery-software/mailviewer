@@ -121,13 +121,13 @@ export default function Viewer() {
           onDrop={onDrop}
         >
           <h3>Drop a file here</h3>
-          <p>.eml · .emlx · .msg · .mbox · .pst · .ost</p>
+          <p>.eml · .emlx · .msg · .oft · .mbox · .pst · .ost · .olm · .mht</p>
 
           <input
             ref={inputRef}
             type="file"
             hidden
-            accept=".eml,.emlx,.msg,.mbox,.mbx,.pst,.ost,message/rfc822"
+            accept=".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,message/rfc822"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void load(f);

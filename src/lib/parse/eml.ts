@@ -1,6 +1,7 @@
 import PostalMime from "postal-mime";
 import type { Address, Attachment, Message, ParsedArchive } from "../model";
 import { singleMessageArchive } from "./archive";
+import { partContentLocations } from "./mhtml";
 import { extractTnefAttachments } from "./tnef";
 
 /**
@@ -113,7 +114,7 @@ export async function parseEmlMessage(
   bytes: Uint8Array,
   id: string,
   folderPath: string[],
-  format: "eml" | "emlx" | "mbox",
+  format: "eml" | "emlx" | "mbox" | "mht",
   warnings: string[] = [],
 ): Promise<Message> {
   const source = format === "emlx" ? stripEmlxWrapper(bytes) : bytes;
@@ -143,6 +144,19 @@ export async function parseEmlMessage(
       content,
     };
   });
+
+  // MHTML references inline sub-resources by Content-Location, a header
+  // postal-mime does not surface on attachments. Recover it from the raw
+  // container and pair it with each attachment by position -- both lists are in
+  // document order (see mhtml.ts) -- so sanitize.ts can resolve body `src`
+  // attributes against it the way it resolves cid: for ordinary mail.
+  if (format === "mht") {
+    const locations = partContentLocations(source);
+    attachments.forEach((att, i) => {
+      const loc = locations[i];
+      if (loc) att.contentLocation = loc;
+    });
+  }
 
   const headers = (email.headers ?? []).map((h) => ({ key: h.key, value: h.value }));
 
@@ -184,7 +198,7 @@ export async function parseEmlMessage(
 export async function parseEml(
   bytes: Uint8Array,
   name: string,
-  format: "eml" | "emlx" = "eml",
+  format: "eml" | "emlx" | "mht" = "eml",
 ): Promise<ParsedArchive> {
   const warnings: string[] = [];
   const message = await parseEmlMessage(bytes, "msg-0", [name], format, warnings);

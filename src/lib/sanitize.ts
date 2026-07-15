@@ -76,6 +76,16 @@ export function sanitizeMessageHtml(
     if (att.contentId) byCid.set(att.contentId.replace(/^<|>$/g, "").toLowerCase(), att);
   }
 
+  // MHTML web archives point their body's `src` at a part's Content-Location URL
+  // rather than a cid:. Those URLs are usually absolute (http://...), so without
+  // this they would be treated as remote and blocked. Resolve them against the
+  // archive's own parts first, and inline the bytes as data: URLs -- the same
+  // opaque-origin reasoning as cid: (see toDataUrl above).
+  const byLocation = new Map<string, Attachment>();
+  for (const att of attachments) {
+    if (att.contentLocation) byLocation.set(att.contentLocation.toLowerCase(), att);
+  }
+
   const hook = (node: Element) => {
     for (const attr of ["src", "background", "poster"]) {
       const value = node.getAttribute(attr);
@@ -91,6 +101,12 @@ export function sanitizeMessageHtml(
           // place would make the browser try to resolve it; drop it instead.
           node.removeAttribute(attr);
         }
+        continue;
+      }
+
+      const located = byLocation.get(value.toLowerCase());
+      if (located) {
+        node.setAttribute(attr, toDataUrl(located.content, located.mimeType));
         continue;
       }
 

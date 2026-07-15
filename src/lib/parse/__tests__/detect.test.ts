@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectFormat } from "../detect";
+import { declineObsoleteFormat, detectFormat } from "../detect";
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
@@ -43,5 +43,62 @@ describe("detectFormat", () => {
   it("does not call a plain text file starting with a number .emlx", () => {
     const notEmlx = enc("42\nthis is just a text file, not a message\n");
     expect(detectFormat(notEmlx, "notes.txt")).toBe("eml");
+  });
+
+  it("identifies a compound file named .oft as an Outlook template", () => {
+    const cfb = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0, 0]);
+    expect(detectFormat(cfb, "welcome.oft")).toBe("oft");
+    // The identical bytes under any other name are still a plain .msg.
+    expect(detectFormat(cfb, "welcome.msg")).toBe("msg");
+    expect(detectFormat(cfb, "welcome")).toBe("msg");
+  });
+
+  it("identifies a ZIP named .olm as an Outlook for Mac archive", () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
+    expect(detectFormat(zip, "backup.olm")).toBe("olm");
+    // A bare ZIP of something else is not an archive we claim to read.
+    expect(detectFormat(zip, "photos.zip")).toBe("eml");
+  });
+
+  it("identifies an MHTML web archive as mht", () => {
+    const mht = enc(
+      "From: <Saved by Blink>\r\n" +
+        "Subject: Saved page\r\n" +
+        "MIME-Version: 1.0\r\n" +
+        'Content-Type: multipart/related; boundary="----=_B"\r\n\r\n' +
+        "------=_B\r\nContent-Type: text/html\r\n\r\n<html></html>\r\n------=_B--\r\n",
+    );
+    expect(detectFormat(mht, "page.mht")).toBe("mht");
+    expect(detectFormat(mht, "page.mhtml")).toBe("mht");
+    // Without the extension it falls back to the ordinary eml path, which still
+    // reads the container -- only the Content-Location resolution is skipped.
+    expect(detectFormat(mht, "page.eml")).toBe("eml");
+  });
+});
+
+describe("declineObsoleteFormat", () => {
+  const empty = new Uint8Array(0);
+
+  it("declines Lotus Notes .nsf with a message that names the format and a next step", () => {
+    const msg = declineObsoleteFormat(empty, "mail.nsf");
+    expect(msg).toBeTruthy();
+    expect(msg!).toMatch(/\.nsf|Lotus Notes|HCL Notes/i);
+    expect(msg!).toMatch(/export|\.eml|\.mbox/i);
+  });
+
+  it("declines an .nsf recognised by its header even when renamed", () => {
+    const nsf = new Uint8Array([0x1a, 0x00, 0x00, 0x04, 0x00, 0x00]);
+    expect(declineObsoleteFormat(nsf, "renamed.bin")).toMatch(/Lotus Notes|HCL Notes/i);
+  });
+
+  it("declines Outlook Express .dbx with a helpful message", () => {
+    const msg = declineObsoleteFormat(empty, "Inbox.dbx");
+    expect(msg).toBeTruthy();
+    expect(msg!).toMatch(/\.dbx|Outlook Express/i);
+    expect(msg!).toMatch(/\.eml/i);
+  });
+
+  it("returns null for a format we actually handle", () => {
+    expect(declineObsoleteFormat(enc("From: a@b.c\r\n\r\nhi"), "message.eml")).toBeNull();
   });
 });

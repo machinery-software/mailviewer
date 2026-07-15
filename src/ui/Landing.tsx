@@ -4,8 +4,11 @@ const FORMATS = [
   { ext: ".eml", name: "Standard email", note: "RFC 5322 / MIME. What most clients export." },
   { ext: ".emlx", name: "Apple Mail", note: "The same message, wrapped in Apple's byte-count header." },
   { ext: ".msg", name: "Outlook message", note: "Compound-file MAPI. Read without owning Outlook." },
+  { ext: ".oft", name: "Outlook template", note: "The same compound file as a .msg, saved as a form." },
   { ext: ".mbox", name: "Mail archive", note: "Gmail Takeout, Thunderbird. Thousands of messages in one file." },
   { ext: ".pst / .ost", name: "Outlook data file", note: "The whole mailbox, folder tree intact." },
+  { ext: ".olm", name: "Outlook for Mac", note: "A zipped archive. The folder tree is rebuilt from it." },
+  { ext: ".mht", name: "Saved web archive", note: "MHTML from a browser or Word. Inline images resolve." },
 ];
 
 export default function Landing() {
@@ -40,10 +43,10 @@ export default function Landing() {
           </h1>
 
           <p className="lede">
-            Drop in a .eml, .msg, .mbox or .pst and read it — headers, HTML, attachments,
-            folder tree and all. The file is opened by JavaScript on your own machine.
-            Nothing is uploaded, because this page is served with a policy that makes
-            uploading impossible.
+            Drop in an Outlook, Apple Mail, or Gmail export — .eml, .msg, .mbox, .pst and
+            more — and read it: headers, HTML, attachments, folder tree and all. The file is
+            opened by JavaScript on your own machine. Nothing is uploaded, because this page
+            is served with a policy that makes uploading impossible.
           </p>
 
           <div className="hero-cta">

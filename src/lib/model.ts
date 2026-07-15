@@ -7,7 +7,17 @@
  * which format a message came from except to display a badge.
  */
 
-export type SourceFormat = "eml" | "emlx" | "msg" | "mbox" | "pst" | "ost" | "tnef";
+export type SourceFormat =
+  | "eml"
+  | "emlx"
+  | "msg"
+  | "mbox"
+  | "pst"
+  | "ost"
+  | "tnef"
+  | "mht"
+  | "oft"
+  | "olm";
 
 export interface Address {
   name?: string;
@@ -22,6 +32,12 @@ export interface Attachment {
   size: number;
   /** Set when the attachment is referenced by a cid: URL in the HTML body. */
   contentId?: string;
+  /**
+   * The part's Content-Location. MHTML web archives reference their inline
+   * sub-resources by this URL from the body's `src` attributes, the way ordinary
+   * mail uses cid:. Set only by the MHTML path; sanitize.ts resolves it.
+   */
+  contentLocation?: string;
   /** True for images displayed inline rather than listed as a download. */
   inline: boolean;
   content: Uint8Array;
