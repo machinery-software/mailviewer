@@ -130,6 +130,19 @@ export default function Landing() {
 
           <div className="step" style={{ gridTemplateColumns: "1fr" }}>
             <div>
+              <h4>Even the host's own analytics can't get through</h4>
+              <p>
+                Hosting platforms sometimes inject an analytics beacon into a page at their
+                edge, after our code has run. This one's CSP refuses it: you may see a{" "}
+                <em>blocked</em> request to an analytics host in the live monitor, and that's
+                the browser turning it away before a byte is sent. We show it on purpose —
+                it's the same refusal that stops the app itself from phoning home.
+              </p>
+            </div>
+          </div>
+
+          <div className="step" style={{ gridTemplateColumns: "1fr" }}>
+            <div>
               <h4>It works with your network turned off</h4>
               <p>
                 The strongest test we can offer: load the page, go offline, and open your

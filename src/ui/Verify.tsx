@@ -144,6 +144,28 @@ export default function Verify() {
 
           <div className="step">
             <div>
+              <h4>If you see a request to an analytics host, read this</h4>
+              <p>
+                Depending on where this page is hosted, you might spot a{" "}
+                <b>blocked</b> or <b>failed</b> request to a domain like{" "}
+                <code>static.cloudflareinsights.com</code> — a beacon the hosting platform
+                injects at its edge, after our code has run. Don't panic: click it and look at
+                the <b>Size</b> column. It transferred <b>0 bytes</b>, and the Console shows a{" "}
+                <code>Content Security Policy</code> refusal for it.
+              </p>
+              <p>
+                That is the guarantee working, not failing. The browser blocked the host's own
+                beacon for exactly the same reason it would block this app trying to upload your
+                mail. The live monitor below counts these separately: requests that{" "}
+                <em>loaded</em> (our code) versus requests the browser <em>blocked</em>. The
+                only number that would ever matter is a foreign request that actually
+                transferred data — and there is a red banner waiting if that ever happens.
+              </p>
+            </div>
+          </div>
+
+          <div className="step">
+            <div>
               <h4>The final test: pull the plug</h4>
               <p>
                 Load this page, then disconnect from the internet — turn off Wi-Fi, or set the

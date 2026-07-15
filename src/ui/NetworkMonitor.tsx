@@ -21,51 +21,69 @@ function pathOf(url: string): string {
 /**
  * The live network log of this very page.
  *
- * Every row is a request the browser actually made. The rows you see are the
- * app's own JavaScript and CSS, fetched from this origin when the page loaded.
- * The number that matters is the second one, and it is zero.
+ * Two columns tell the whole story. On the left, requests that actually loaded
+ * -- every one from this origin, the app's own code. On the right, requests the
+ * browser BLOCKED under the CSP, which is the mechanism that also makes leaking
+ * your mail impossible. The one number that would mean trouble -- a foreign
+ * request that transferred real data -- has its own banner and stays at zero.
  */
 export default function NetworkMonitor({ compact = false }: { compact?: boolean }) {
-  const [state, setState] = useState<NetGuardState>({ events: [], foreignCount: 0 });
+  const [state, setState] = useState<NetGuardState>({ events: [], blocked: [], leakedCount: 0 });
 
   useEffect(() => subscribeNetGuard(setState), []);
 
-  const foreign = state.foreignCount;
+  const loaded = state.events;
+  const blocked = state.blocked;
+  const leaked = state.leakedCount;
 
   return (
     <div className="monitor">
       <div className="monitor-head">
         <span className="pulse" aria-hidden="true" />
         <span>Network activity · live</span>
-        <span className="monitor-count">{state.events.length} total</span>
+        <span className="monitor-count">{loaded.length} loaded</span>
       </div>
+
+      {leaked > 0 && (
+        <div className="monitor-alarm" role="alert">
+          {leaked} request{leaked === 1 ? "" : "s"} sent data to another server. Something is
+          wrong — do not use this page for sensitive mail.
+        </div>
+      )}
 
       <div className="tally">
         <div className="tally-cell">
-          <div className="tally-num neutral">{state.events.length}</div>
+          <div className="tally-num neutral">{loaded.length}</div>
           <div className="tally-label">
-            requests to this site, all of them the app's own code
+            requests that loaded — every one is this site's own code
           </div>
         </div>
         <div className="tally-cell">
-          <div className={`tally-num ${foreign === 0 ? "zero" : "nonzero"}`}>{foreign}</div>
+          <div className={`tally-num ${blocked.length > 0 ? "good" : "neutral"}`}>
+            {blocked.length}
+          </div>
           <div className="tally-label">
-            {foreign === 0
-              ? "requests to anywhere else. This is the number that matters."
-              : "requests to another server. Something is wrong — do not use this page."}
+            {blocked.length > 0
+              ? "requests to another server, blocked by the browser before any data was sent"
+              : "requests the browser had to block — none needed blocking yet"}
           </div>
         </div>
       </div>
 
       {!compact && (
-        <div className="reqlist" role="log" aria-label="Network requests made by this page">
-          {state.events.length === 0 && (
-            <div className="req">
-              <span className="req-url">Waiting for the first request…</span>
+        <div className="reqlist" role="log" aria-label="Network activity on this page">
+          {blocked.map((b, i) => (
+            <div className="req" key={`b-${b.uri}-${i}`}>
+              <span className="req-origin blocked" title={`blocked by ${b.directive}`}>
+                blocked
+              </span>
+              <span className="req-url" title={`${b.uri} — refused by ${b.directive}`}>
+                {hostOf(b.uri)} · refused by {b.directive}
+              </span>
             </div>
-          )}
-          {state.events.map((e, i) => (
-            <div className="req" key={`${e.url}-${i}`}>
+          ))}
+          {loaded.map((e, i) => (
+            <div className="req" key={`e-${e.url}-${i}`}>
               <span className={`req-origin ${e.sameOrigin ? "self" : "foreign"}`}>
                 {e.sameOrigin ? "self" : hostOf(e.url)}
               </span>
@@ -74,11 +92,17 @@ export default function NetworkMonitor({ compact = false }: { compact?: boolean 
               </span>
             </div>
           ))}
+          {loaded.length === 0 && blocked.length === 0 && (
+            <div className="req">
+              <span className="req-url">Waiting for the first request…</span>
+            </div>
+          )}
         </div>
       )}
 
       <div className="monitor-foot">
-        Counted in-page with <code>PerformanceObserver</code>. Don't take its word for it —{" "}
+        Read in-page with <code>PerformanceObserver</code> and the browser's{" "}
+        <code>securitypolicyviolation</code> event. Don't take its word for it —{" "}
         <a href="#/verify">check it in DevTools</a>.
       </div>
     </div>

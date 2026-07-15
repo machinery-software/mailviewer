@@ -275,8 +275,19 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 .tally-num.zero { color: var(--teal); }
+.tally-num.good { color: var(--teal); }
 .tally-num.nonzero { color: var(--red); }
 .tally-num.neutral { color: var(--bone); }
+
+.monitor-alarm {
+  padding: 12px 16px;
+  background: rgba(255, 107, 107, 0.12);
+  border-bottom: 1px solid var(--red);
+  color: var(--red);
+  font-size: 13px;
+  font-family: var(--mono);
+  line-height: 1.45;
+}
 
 .tally-label {
   font-size: 12px;
@@ -311,6 +322,8 @@ kbd {
 }
 .req-origin.self { background: var(--teal-dim); color: var(--teal); }
 .req-origin.foreign { background: #5a1e1e; color: var(--red); }
+/* A blocked request is the CSP working, so it reads as a win, not an error. */
+.req-origin.blocked { background: var(--teal-dim); color: var(--teal); }
 
 .req-url {
   color: var(--muted);
