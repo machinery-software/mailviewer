@@ -1,0 +1,180 @@
+name: CI
+
+# Runs on every PR and on main. This is the gate: deploy.yml will not run its
+# production job unless the same checks below have passed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A second push to a PR should cancel the first run rather than queue behind it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, test, build, privacy checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The repo pins no Node version (no .nvmrc, no package.json engines).
+          # 22 is what the previous workflow used. The build was verified to
+          # produce byte-identical output on 22 and on 24, so this is a
+          # convention rather than a constraint -- see DEPLOYMENT.md.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` is `tsc --noEmit && vite build`, so this covers the
+      # typecheck as well. Kept as one step so a type error and a bundling
+      # error are not reported as the same failure.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # ----------------------------------------------------------------------
+      # Privacy checks. These are not style checks; each one guards a claim the
+      # product makes to its users in writing.
+      # ----------------------------------------------------------------------
+
+      - name: No unapproved external origins in the build
+        run: bash scripts/check-external-origins.sh dist
+
+      # The CSP is the privacy guarantee. If a refactor drops a directive from
+      # public/_headers, the build must not be shippable.
+      - name: Security headers present in build output
+        run: |
+          set -euo pipefail
+          f=dist/_headers
+          test -f "$f" || { echo "::error::$f is missing from the build."; exit 1; }
+
+          # Strip comment lines before matching. public/_headers documents each
+          # CSP directive in a comment block directly above the real header, so
+          # grepping the raw file matches the *explanation* of a directive even
+          # when the directive itself has been deleted -- a guard that always
+          # passes. Match only the active (non-comment) lines.
+          active="$(grep -vE '^[[:space:]]*#' "$f")"
+
+          fail=0
+          # Each of these is load-bearing. The message says what breaks without it.
+          check() {
+            if printf '%s\n' "$active" | grep -Fq "$1"; then
+              echo "  ok    $1"
+            else
+              echo "::error::$f no longer contains: $1"
+              echo "        $2"
+              fail=1
+            fi
+          }
+          check "connect-src 'none'"    "Without this the page could fetch()/beacon mail to a server."
+          check "form-action 'none'"    "Without this a phishing form inside a message could submit."
+          check "object-src 'none'"     "Without this a plugin object is an escape hatch from the CSP."
+          check "base-uri 'none'"       "Without this a <base> tag in a message could rewrite relative URLs."
+          check "frame-ancestors 'none'" "Without this the viewer can be framed for clickjacking."
+          check "script-src 'self'"     "Without this an inline script from a message body could run."
+          check "Referrer-Policy: no-referrer" "Without this an outbound click leaks the viewer URL."
+          exit $fail
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
+  # --------------------------------------------------------------------------
+  # PR preview.
+  #
+  # This uploads a Worker *version* without giving it any production traffic.
+  # `wrangler versions upload` is specifically the no-traffic half of the
+  # deploy: a version exists and gets its own preview URL, but the live
+  # deployment is untouched until someone runs `versions deploy`.
+  #
+  # Deliberately gated on the PR coming from this repository. A PR from a fork
+  # must not get access to the Cloudflare token, and using `pull_request`
+  # (not `pull_request_target`) means fork PRs run without secrets anyway --
+  # the explicit condition makes the intent obvious rather than incidental.
+  # --------------------------------------------------------------------------
+  preview:
+    name: Upload preview version
+    needs: verify
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Upload version (no production traffic)
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          npx wrangler versions upload \
+            --message "PR #${{ github.event.pull_request.number }} (${{ github.sha }})" \
+            2>&1 | tee upload.log
+
+          # Preview URLs are enabled on this Worker (previews_enabled: true),
+          # so the upload prints a per-version URL on the account subdomain.
+          # Parsed rather than constructed, because the version-prefix scheme is
+          # wrangler's to choose and not something we should hardcode.
+          url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' upload.log | head -1 || true)"
+          vid="$(grep -oiE 'version id:?[[:space:]]*[0-9a-f-]{36}' upload.log | grep -oE '[0-9a-f-]{36}' | head -1 || true)"
+          echo "preview_url=$url" >> "$GITHUB_OUTPUT"
+          echo "version_id=$vid" >> "$GITHUB_OUTPUT"
+          if [ -z "$url" ]; then
+            echo "::warning::Could not parse a preview URL from the wrangler output."
+          fi
+
+      - name: Comment preview URL on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.upload.outputs.preview_url }}';
+            const vid = '${{ steps.upload.outputs.version_id }}';
+            const marker = '<!-- mailviewer-preview -->';
+            const body = url
+              ? `${marker}\n### Preview\n\n${url}\n\n` +
+                `Version \`${vid || 'unknown'}\` — uploaded, **not** serving production traffic.\n\n` +
+                `Worth checking by hand: open a \`.eml\`, a \`.msg\` and a \`.pst\`; confirm the ` +
+                `Network panel shows no third-party request; confirm the CSP self-test on the ` +
+                `privacy page still reports the fetch as blocked.`
+              : `${marker}\n### Preview\n\nUpload succeeded but no preview URL could be parsed ` +
+                `from the wrangler output. Check the job log.`;
+
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const existing = (await github.rest.issues.listComments({owner, repo, issue_number}))
+              .data.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
