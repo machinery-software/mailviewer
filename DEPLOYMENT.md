@@ -288,10 +288,96 @@ Nothing was actually shipped with a broken CSP; the live headers are correct
 Each live file was fetched from `https://mailviewer.app/...` and hashed; the
 served `index.html` was also `diff`ed against the built one and is identical.
 
-This means **the deployed artifact is verifiably the source in this repo at
-`7d30a90`** — there is no drift between what is published and what can be read.
+This means **the stored artifact is verifiably the source in this repo at
+`7d30a90`** — the files Cloudflare holds are exactly the files this repo builds.
 That is worth keeping true; it is the basis on which anyone can audit the
 privacy claim.
+
+> ⚠️ **What a browser actually receives is not this.** The zone injects an extra
+> `<script>` tag into the HTML response for browser requests. The hashes above
+> describe the *stored* artifact, not the *delivered* page. See §5a.
+
+---
+
+## 5a. The zone injects a Cloudflare Web Analytics beacon
+
+**Status: live right now, on the apex domain, as of 2026-08-17.**
+
+`mailviewer.app` serves a different HTML body depending on who asks:
+
+```bash
+$ curl -sS https://mailviewer.app/ | wc -c
+1116                                   # matches dist/index.html exactly
+
+$ curl -sS -A "Mozilla/5.0 ... Chrome/120.0 ..." https://mailviewer.app/ | wc -c
+1475                                   # 359 bytes larger
+```
+
+The difference is a script tag appended before `</body>`:
+
+```html
+<script type="module"
+  src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae..."
+  integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ=="
+  data-cf-beacon='{"version":"2024.11.0","token":"bbb3d07a919744cc9291acd33a368be7","r":1}'
+  crossorigin="anonymous"></script>
+```
+
+This is Cloudflare **Web Analytics → Automatic Setup**, injected at the edge. It
+is not in this repo, not in `dist/`, and not in `_headers`.
+
+### Does it leak anything?
+
+**No.** The served CSP is `script-src 'self'`, and
+`static.cloudflareinsights.com` is not `'self'`, so the browser refuses to load
+or execute it. Nothing is transferred and no analytics are collected.
+
+### Then why does it matter?
+
+Because the product's pitch is *"nothing leaves your browser — verify it
+yourself in DevTools."* A claims or legal user who does exactly that sees a
+third-party tracking script in their Network panel, flagged red. The app's own
+network monitor treats it as a foreign request. The CSP holding is the *correct*
+outcome, but "we tried to load a tracker and were blocked" is not the story this
+tool wants to tell about itself.
+
+This was found and disabled once before, on 2026-07-15. It has regressed.
+
+### It is invisible from CI and from previews
+
+Two independent reasons a check would miss it:
+
+1. **Plain `curl` does not trigger it.** Injection is keyed on the request
+   looking like a browser. Every non-browser health check sees the clean
+   1116-byte body, so the checks in `deploy.yml` cannot catch this.
+2. **`workers.dev` is not affected.** Injection is zone-level, and the
+   `*.workers.dev` hostname is not in the zone:
+
+   ```bash
+   $ curl -sS -A "Mozilla/5.0 ... Chrome/120.0 ..." \
+       https://mailviewer.patchable-account.workers.dev/ | wc -c
+   1116                               # clean
+   ```
+
+   **Per-version preview URLs live on `workers.dev`.** So smoke-testing a preview
+   will never reveal this, however carefully it is done. Preview clean and
+   production dirty is the expected state until the zone setting changes.
+
+### Fixing it
+
+Dashboard only — the Workers-scoped API token cannot change zone analytics
+settings:
+
+**Cloudflare dashboard → Web Analytics → mailviewer.app → disable Automatic
+Setup** (or remove the site).
+
+Verify with a browser User-Agent, not a bare curl:
+
+```bash
+curl -sS -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+  https://mailviewer.app/ | grep -c cloudflareinsights   # want: 0
+```
 
 **Correction:** the build is *not* a single self-contained HTML file. It is a
 1,116-byte `index.html` referencing four content-hashed assets. This matters for

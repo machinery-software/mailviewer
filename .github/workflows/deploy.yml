@@ -246,6 +246,35 @@ jobs:
             fail=1
           }
 
+          # Edge-injected script check.
+          #
+          # Cloudflare Web Analytics "Automatic Setup" injects a beacon <script>
+          # into HTML responses, but ONLY when the request looks like it came
+          # from a browser -- the plain curl above sees a clean body. So re-fetch
+          # with a browser User-Agent, which is the only way to observe what a
+          # real user is actually served.
+          #
+          # A warning rather than a failure, deliberately: the CSP
+          # (script-src 'self') blocks the beacon, so nothing leaks and the
+          # privacy guarantee holds. But it is visible to anyone auditing in
+          # DevTools, which is exactly what this app invites people to do. It is
+          # also a zone setting, so failing the deploy would block releases on a
+          # dashboard toggle that no code change or rollback can fix.
+          curl -sS --max-time 30 \
+            -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml" \
+            https://mailviewer.app/ > /tmp/body_ua.html || true
+
+          if grep -q "cloudflareinsights" /tmp/body_ua.html; then
+            echo "::warning::Cloudflare Web Analytics is injecting a beacon script into mailviewer.app. The CSP blocks it, so nothing leaks -- but anyone auditing in DevTools sees a third-party tracker. Disable it: dashboard > Web Analytics > mailviewer.app > Automatic Setup. See DEPLOYMENT.md section 5a."
+          else
+            echo "  ok    no edge-injected beacon in the browser-UA response"
+          fi
+
+          # Note: this cannot be checked on a preview URL. Injection is
+          # zone-level and previews are served from *.workers.dev, which is
+          # outside the zone and therefore always clean. DEPLOYMENT.md 5a.
+
           if [ "$fail" -ne 0 ]; then
             echo
             echo "::error::Health check failed. Roll back to ${{ steps.rollback.outputs.previous_version }} -- see DEPLOYMENT.md."

@@ -123,6 +123,36 @@ never report.
 
 ---
 
+## 6. Unrelated to CI, but found while checking: disable the Web Analytics beacon
+
+`mailviewer.app` is currently serving a Cloudflare Web Analytics beacon script to
+real browsers. It is injected at the edge, is not in this repo, and is invisible
+to plain `curl` — it only appears when the request looks like a browser.
+
+The CSP blocks it, so nothing leaks. But the app tells users to verify the
+privacy claim in DevTools, and what they currently see there is a blocked
+third-party tracker. Full detail and evidence in `DEPLOYMENT.md` §5a.
+
+**Cloudflare dashboard → Web Analytics → mailviewer.app → disable Automatic
+Setup** (or remove the site).
+
+This cannot be automated: the Workers-scoped token in step 1 has no access to
+zone analytics settings, by design.
+
+Verify with a browser User-Agent — a bare `curl` will always look clean:
+
+```bash
+curl -sS -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+  https://mailviewer.app/ | grep -c cloudflareinsights   # want: 0
+```
+
+This regressed once already — it was disabled on 2026-07-15 and is back — so it
+is worth re-checking after any zone or DNS reconfiguration. The deploy workflow
+now warns (but does not fail) when it detects the beacon after a release.
+
+---
+
 ## Verifying it works
 
 After all of the above, open a throwaway PR that changes only a comment:
@@ -130,7 +160,10 @@ After all of the above, open a throwaway PR that changes only a comment:
 1. **CI** runs: typecheck, tests, build, external-origin check, header check.
 2. **Upload preview version** posts a comment with a `*.workers.dev` preview URL.
 3. Open that URL, load a `.eml` and a `.msg`, and confirm in DevTools that the
-   Network panel shows no third-party request.
+   Network panel shows no third-party request. (Note: a preview is served from
+   `*.workers.dev`, which is outside the zone, so it will look clean even while
+   the apex is serving the beacon in step 6. A clean preview is not evidence
+   about production here.)
 4. Close the PR without merging.
 
 Nothing in that sequence touches production.
