@@ -15,6 +15,25 @@ import type { Message } from "./model";
 export const PRINT_CONTENT_WIDTH_PX = Math.round(((210 - 24) / 25.4) * 96);
 
 /**
+ * The height, in CSS pixels, of the printable area of one page.
+ *
+ * A4 (297mm) less the 12mm margins, at 96dpi. This is the *viewport* the
+ * measuring frame is given, and it has to be a plausible page rather than a
+ * convenient placeholder: a message body is free to size itself against the
+ * viewport -- `height: 100vh`, `position: absolute` pinned top-to-bottom,
+ * `position: fixed` -- and whatever the frame is tall, that CSS believes a page
+ * is. Measured inside a 10px-tall frame, such a body reports about 64px of
+ * content and prints as a single near-empty page no matter how much text it
+ * holds.
+ *
+ * US Letter's printable height is shorter, so a body pinned to the viewport
+ * measures slightly taller than it will print and gains a little trailing
+ * space. That is the safe direction, the same way PRINT_CONTENT_WIDTH_PX
+ * measures narrow.
+ */
+export const PRINT_PAGE_HEIGHT_PX = Math.round(((297 - 24) / 25.4) * 96);
+
+/**
  * The most messages a single print job will render.
  *
  * Printing renders every message into its own frame at once, so an unbounded
@@ -86,15 +105,22 @@ export async function measureBodyHeight(
   srcDoc: string,
   width = PRINT_CONTENT_WIDTH_PX,
   timeoutMs = 8000,
+  height = PRINT_PAGE_HEIGHT_PX,
 ): Promise<number> {
   const frame = document.createElement("iframe");
   frame.setAttribute("sandbox", "allow-same-origin");
   frame.setAttribute("aria-hidden", "true");
   frame.setAttribute("tabindex", "-1");
-  // Off-screen rather than display:none or hidden: a frame that is not being
-  // laid out has no height to report.
+  // Sized to a page, not to a placeholder: see PRINT_PAGE_HEIGHT_PX. The frame
+  // is clipped by a zero-size wrapper rather than pushed off-screen, so that a
+  // body which overflows it horizontally -- and they do -- cannot paint into
+  // the app while it is being measured.
+  const clip = document.createElement("div");
+  clip.setAttribute("aria-hidden", "true");
+  clip.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;overflow:hidden;";
   frame.style.cssText =
-    `position:absolute;left:-200vw;top:0;width:${width}px;height:10px;border:0;visibility:hidden;`;
+    `width:${width}px;height:${height}px;border:0;visibility:hidden;`;
+  clip.appendChild(frame);
 
   // srcdoc is set *before* the frame is inserted, and this ordering is
   // load-bearing. Inserting an iframe with nothing in it fires a `load` for the
@@ -108,7 +134,7 @@ export async function measureBodyHeight(
     frame.addEventListener("load", () => resolve(), { once: true });
   });
 
-  document.body.appendChild(frame);
+  document.body.appendChild(clip);
 
   try {
     await Promise.race([done, new Promise<void>((r) => setTimeout(r, timeoutMs))]);
@@ -136,6 +162,6 @@ export async function measureBodyHeight(
     // message's own CSS lays itself out; take whichever is taller.
     return Math.max(el.scrollHeight, body?.scrollHeight ?? 0);
   } finally {
-    frame.remove();
+    clip.remove();
   }
 }

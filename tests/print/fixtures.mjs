@@ -185,3 +185,35 @@ export function longPlainTextEml(paragraphs = 40, marker = "END-OF-DOCUMENT-MARK
     marker,
   ].join("\r\n");
 }
+
+/**
+ * A body that sizes itself against the viewport.
+ *
+ * Word- and Outlook-authored mail does this often enough to matter: `100vh`,
+ * an absolutely-positioned block pinned top-to-bottom, a percentage-height
+ * chain. Whatever the measuring frame is tall, such a body believes a page is,
+ * which is why the frame has to be a plausible page rather than a placeholder.
+ */
+export function viewportSizedEml(kind = "vh", paragraphs = 40, marker = "VIEWPORT-SIZED-END-MARKER") {
+  const body = Array.from({ length: paragraphs }, (_, i) =>
+    `<p>Paragraph ${i + 1}. The surveyor confirmed that no temporary repairs had been ` +
+    `undertaken prior to inspection.</p>`,
+  ).join("\n");
+
+  const wrapper = {
+    vh: `<div style="height:100vh;overflow:auto">`,
+    absolute: `<div style="position:absolute;top:0;left:0;right:0;bottom:0;overflow:auto">`,
+    fixed: `<div style="position:fixed;top:0;left:0;overflow:auto">`,
+  }[kind];
+
+  return [
+    "From: Adjuster <adjuster@fixture.invalid>",
+    "To: Counsel <counsel@fixture.invalid>",
+    `Subject: Viewport-sized body (${kind})`,
+    "Date: Tue, 3 Jun 2025 09:14:00 -0400",
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    `${wrapper}${body}<p>${marker}</p></div>`,
+  ].join("\r\n");
+}

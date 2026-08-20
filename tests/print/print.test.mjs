@@ -8,6 +8,7 @@ import {
   longMessageEml,
   longPlainTextEml,
   threadMbox,
+  viewportSizedEml,
   wideTableEml,
 } from "./fixtures.mjs";
 import { msgHtml, msgPlainText, msgRtfEncapsulatedHtml, msgRtfText } from "./msgFixture.mjs";
@@ -303,6 +304,32 @@ describe("non-HTML bodies", () => {
       // The end marker is the whole point: truncation is only detectable by
       // looking for the last thing in the document.
       expect(containsText(pdf, marker), `${label}: end marker missing from the PDF`).toBe(true);
+      await page.close();
+    }, 180000);
+  }
+});
+
+/**
+ * The measuring frame has to be the size of a page.
+ *
+ * A message body can size itself against the viewport, and whatever the
+ * measuring frame is tall is what that CSS believes a page to be. The frame
+ * used to be 10px tall as a placeholder, so a `100vh` body reported about 64px
+ * of content and printed as a single near-empty page however much text it held
+ * -- the reported symptom exactly, and reachable from any format, not just the
+ * one it was noticed in.
+ */
+describe("bodies that size themselves against the viewport", () => {
+  for (const kind of ["vh", "absolute", "fixed"]) {
+    it(`measures a page rather than a sliver for a ${kind}-sized body`, async () => {
+      const file = scratchFile(`viewport-${kind}.eml`, viewportSizedEml(kind));
+      const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await openAndPrepare(page, server.origin, file);
+      const [measured] = await measuredHeights(page);
+
+      // The defect produced ~64px. A page is ~1032px; anything in between is
+      // the frame being treated as a viewport-sized sliver again.
+      expect(measured).toBeGreaterThanOrEqual(900);
       await page.close();
     }, 180000);
   }
