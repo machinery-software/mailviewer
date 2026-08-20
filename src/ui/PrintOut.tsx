@@ -143,17 +143,30 @@ export default function PrintOut({ messages, listedCount, onReady }: {
   if (messages.length === 0) return null;
 
   return (
-    <div className="printout" style={{ width: PRINT_CONTENT_WIDTH_PX }} aria-hidden="true">
-      <div className="printout-head">
-        <strong>mailviewer</strong>
-        <span>
-          {messages.length > 1 ? printJobDescription(listedCount, messages.length) : ""}
-          {` Build ${BUILD.version} (${BUILD.commit}). Printed ${new Date().toLocaleString()}.`}
-        </span>
+    /*
+      The shell is a clip box, not a hiding place. Displacing the print document
+      off-screen is not enough on its own: it is laid out at print width, and a
+      plain-text body inside it is a <pre> whose lines do not wrap, so a single
+      paragraph overflows its own box by thousands of pixels and the right-hand
+      end of that line lands back inside the viewport. It painted across the
+      middle of the live app. A zero-size overflow:hidden box cannot do that at
+      any viewport width or zoom level, because there is nothing to overflow
+      into -- while still leaving the contents laid out and loaded, which is
+      what the measuring depends on.
+    */
+    <div className="printout-shell" aria-hidden="true">
+      <div className="printout" style={{ width: PRINT_CONTENT_WIDTH_PX }}>
+        <div className="printout-head">
+          <strong>mailviewer</strong>
+          <span>
+            {messages.length > 1 ? printJobDescription(listedCount, messages.length) : ""}
+            {` Build ${BUILD.version} (${BUILD.commit}). Printed ${new Date().toLocaleString()}.`}
+          </span>
+        </div>
+        {messages.map((m) => (
+          <PrintMessage key={m.id} message={m} onMeasured={onMeasured} />
+        ))}
       </div>
-      {messages.map((m) => (
-        <PrintMessage key={m.id} message={m} onMeasured={onMeasured} />
-      ))}
     </div>
   );
 }
