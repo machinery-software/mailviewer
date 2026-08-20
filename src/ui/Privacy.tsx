@@ -104,7 +104,14 @@ export default function Privacy() {
         </div>
       </section>
 
-      <Footer note="Found a way to make this page leak data? That's a bug — please report it." />
+      <Footer
+        note={
+          <>
+            Found a way to make this page leak data? That's a bug — please 
+            <a href="#/report">report it</a>.
+          </>
+        }
+      />
     </>
   );
 }

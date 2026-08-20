@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Folder, Message, ParseProgress, ParsedArchive } from "../lib/model";
+import type { Folder, Message, ParseProgress, ParsedArchive, SourceFormat } from "../lib/model";
 import { parseFile } from "../lib/parseClient";
 import { namespaceArchive } from "../lib/combine";
 import { takePendingFiles } from "../lib/pendingFiles";
 import { highlight } from "../lib/highlight";
 import MessageView from "./MessageView";
+import { ReportBlock } from "./ReportProblem";
+import { formatFromFilename } from "../lib/report";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
   return [{ folder: f, depth }, ...f.children.flatMap((c) => flattenFolders(c, depth + 1))];
@@ -26,6 +28,11 @@ const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,messa
 interface FileError {
   name: string;
   message: string;
+  /**
+   * The format the extension implied. Kept alongside the error so the report
+   * link can say which parser was involved -- and nothing else about the file.
+   */
+  format?: SourceFormat;
 }
 
 export default function Viewer() {
@@ -63,7 +70,11 @@ export default function Viewer() {
       } catch (err) {
         setErrors((prev) => [
           ...prev,
-          { name: file.name, message: err instanceof Error ? err.message : String(err) },
+          {
+            name: file.name,
+            message: err instanceof Error ? err.message : String(err),
+            format: formatFromFilename(file.name),
+          },
         ]);
       }
     }
@@ -214,6 +225,18 @@ export default function Viewer() {
                 </li>
               ))}
             </ul>
+            {/*
+              Worded to fit both cases this callout covers: a file that broke a
+              parser, and a format we decline on purpose. In the second case the
+              file genuinely cannot be opened, so "this is our bug" would be
+              wrong -- but "if you think it should have opened" still invites the
+              report that matters.
+            */}
+            <p className="report-lead">
+              If you think this file should have opened — it reads fine in another mail client, or
+              it's a format we say we support — we'd like to know.
+            </p>
+            <ReportBlock compact context={{ failed: true, format: errors[0].format }} />
           </div>
         )}
       </section>
@@ -247,6 +270,14 @@ export default function Viewer() {
             </>
           )}
           {errors.map((e) => `${e.name} could not be opened.`).join(" ")}
+          {/*
+            The parsers are deliberately forgiving -- a damaged message is
+            skipped with a warning rather than sinking the file -- so this bar,
+            not the error callout, is what a user actually sees when something
+            has gone wrong. It is the more important of the two places to offer
+            the link.
+          */}{" "}
+          <a href="#/report">Report a problem</a>
         </div>
       )}
 

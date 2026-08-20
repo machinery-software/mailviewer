@@ -919,3 +919,31 @@ pre.code .hl { color: var(--teal); }
   .hero, .section { padding-left: 16px; padding-right: 16px; }
   .step { grid-template-columns: 32px 1fr; gap: 12px; padding: 18px 14px; }
 }
+
+/* ---- Report a problem ---------------------------------------------------- */
+.report { margin-top: 26px; }
+.report-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* The warning about attaching mail files sits directly under the buttons, so it
+   is read before the link is used rather than after. */
+.report-warn {
+  margin: 14px 0 0;
+  color: var(--amber);
+  font-size: 13px;
+  max-width: 68ch;
+}
+.report-note { margin: 14px 0 0; color: var(--muted); font-size: 13px; max-width: 68ch; }
+.report-diag {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--slate-850);
+  color: var(--muted);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.report-lead { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.report-compact { margin-top: 14px; }
+.report-compact .report-warn { margin-top: 10px; }
+.warnbar a { color: inherit; }
