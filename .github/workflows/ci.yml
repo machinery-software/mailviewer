@@ -1,0 +1,104 @@
+name: CI
+
+# Runs on every PR and on main. This is the only workflow in the repository, and
+# it is the gate: it decides whether a change is fit to release, and a human
+# decides whether to release it.
+#
+# Deploying is deliberately not automated. Releases are made by hand with
+# `wrangler versions upload` followed by `wrangler versions deploy` -- see
+# DEPLOYMENT.md. That means this workflow needs no Cloudflare credentials at
+# all, so there is no token in this repository to leak, mis-scope or rotate, and
+# no code path by which a green build can reach real users on its own.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A second push to a PR should cancel the first run rather than queue behind it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, test, build, privacy checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The repo pins no Node version (no .nvmrc, no package.json engines).
+          # 22 is what the previous workflow used. The build was verified to
+          # produce byte-identical output on 22 and on 24, so this is a
+          # convention rather than a constraint -- see DEPLOYMENT.md.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run build` is `tsc --noEmit && vite build`, so this covers the
+      # typecheck as well. Kept as one step so a type error and a bundling
+      # error are not reported as the same failure.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # ----------------------------------------------------------------------
+      # Privacy checks. These are not style checks; each one guards a claim the
+      # product makes to its users in writing.
+      # ----------------------------------------------------------------------
+
+      - name: No unapproved external origins in the build
+        run: bash scripts/check-external-origins.sh dist
+
+      # The CSP is the privacy guarantee. If a refactor drops a directive from
+      # public/_headers, the build must not be shippable.
+      - name: Security headers present in build output
+        run: |
+          set -euo pipefail
+          f=dist/_headers
+          test -f "$f" || { echo "::error::$f is missing from the build."; exit 1; }
+
+          # Strip comment lines before matching. public/_headers documents each
+          # CSP directive in a comment block directly above the real header, so
+          # grepping the raw file matches the *explanation* of a directive even
+          # when the directive itself has been deleted -- a guard that always
+          # passes. Match only the active (non-comment) lines.
+          active="$(grep -vE '^[[:space:]]*#' "$f")"
+
+          fail=0
+          # Each of these is load-bearing. The message says what breaks without it.
+          check() {
+            if printf '%s\n' "$active" | grep -Fq "$1"; then
+              echo "  ok    $1"
+            else
+              echo "::error::$f no longer contains: $1"
+              echo "        $2"
+              fail=1
+            fi
+          }
+          check "connect-src 'none'"    "Without this the page could fetch()/beacon mail to a server."
+          check "form-action 'none'"    "Without this a phishing form inside a message could submit."
+          check "object-src 'none'"     "Without this a plugin object is an escape hatch from the CSP."
+          check "base-uri 'none'"       "Without this a <base> tag in a message could rewrite relative URLs."
+          check "frame-ancestors 'none'" "Without this the viewer can be framed for clickjacking."
+          check "script-src 'self'"     "Without this an inline script from a message body could run."
+          check "Referrer-Policy: no-referrer" "Without this an outbound click leaks the viewer URL."
+          exit $fail
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7
