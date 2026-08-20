@@ -3,6 +3,7 @@ import type { Message } from "../model";
 import {
   PRINT_CONTENT_WIDTH_PX,
   PRINT_LIST_CAP,
+  PRINT_PAGE_HEIGHT_PX,
   listScopeLabel,
   messagesToPrint,
   printJobDescription,
@@ -93,5 +94,21 @@ describe("PRINT_CONTENT_WIDTH_PX", () => {
     const letterContentPx = Math.round(((215.9 - 24) / 25.4) * 96);
     expect(PRINT_CONTENT_WIDTH_PX).toBe(703);
     expect(PRINT_CONTENT_WIDTH_PX).toBeLessThan(letterContentPx);
+  });
+});
+
+describe("PRINT_PAGE_HEIGHT_PX", () => {
+  // A message body is free to size itself against the viewport, and whatever
+  // the measuring frame is tall is what that CSS believes a page to be. This
+  // was a 10px placeholder, which made a `100vh` body report ~64px of content
+  // and print as one near-empty page regardless of how much text it held.
+  it("is a plausible page, not a placeholder", () => {
+    expect(PRINT_PAGE_HEIGHT_PX).toBe(1032);
+    expect(PRINT_PAGE_HEIGHT_PX).toBeGreaterThan(PRINT_CONTENT_WIDTH_PX);
+  });
+
+  it("is A4's printable height, which is taller than US Letter's", () => {
+    const letterPrintableHeightPx = Math.round(((279.4 - 24) / 25.4) * 96);
+    expect(PRINT_PAGE_HEIGHT_PX).toBeGreaterThan(letterPrintableHeightPx);
   });
 });

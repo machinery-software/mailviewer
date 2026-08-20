@@ -36,11 +36,22 @@ export async function openAndPrepare(page, origin, file, { expectFrames = 1 } = 
   await waitForMeasured(page, expectFrames);
 }
 
+/**
+ * Wait until the print document is ready to be printed.
+ *
+ * `expectFrames: 0` is the case for a body that never reaches a frame at all --
+ * plain text and non-encapsulated RTF render as a <pre> in the parent document
+ * and have nothing to measure. Those still have to be waited for, so this waits
+ * on the print document being populated rather than on frames existing.
+ */
 export function waitForMeasured(page, expectFrames) {
   return page.waitForFunction(
     (n) => {
-      const frames = [...document.querySelectorAll(".printout iframe")];
-      return frames.length >= n && frames.every((f) => parseInt(f.style.height, 10) > 0);
+      const shell = document.querySelector(".printout-shell");
+      if (!shell || !shell.querySelector(".printmsg")) return false;
+      const frames = [...shell.querySelectorAll("iframe")];
+      if (frames.length < n) return false;
+      return frames.every((f) => parseInt(f.style.height, 10) > 0);
     },
     expectFrames,
     { timeout: 60000 },
@@ -125,7 +136,7 @@ export async function firefoxPdf(page, outPath, timeoutMs = 30000) {
  * which is exactly the situation this change replaced.
  */
 export const undoFix = () => {
-  document.querySelector(".printout")?.remove();
+  document.querySelector(".printout-shell")?.remove();
   const style = document.createElement("style");
   style.textContent =
     "@media print{ .topbar{display:flex!important} .viewer{display:grid!important} }";

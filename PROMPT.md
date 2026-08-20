@@ -1,140 +1,121 @@
-# mailviewer.app — support contact + print-to-PDF truncation
+# mailviewer.app — two print bugs from the PR #2 staging preview
 
-Two user-reported items. Both touch the live app, so they go through the
-approval-gated pipeline from PR #1: build, typecheck, tests, preview
-smoke-test, then David approves production. Smallest diff that solves each
-problem — no refactoring alongside.
+Found on the staging preview of PR #2 (`fix/support-and-print`). Both block the
+deploy. Bug 1 is a visible regression introduced by the print fix itself, so
+this cannot ship as-is.
+
+Not deployed, not merged. Production remains on version
+`9b24838a-47b8-4516-84dd-92fc0f193eee` (commit `7d30a90`).
 
 **Never deploy. Never self-merge.** Output is a PR.
 
 ---
 
-## Item 1 — Users have no way to report bugs
+## Bug 1 (P0) — print container leaks into the on-screen UI in Safari
 
-There is currently no support contact anywhere on the page. Add one.
+A line of message body text renders across the middle of the live app window,
+overlapping the message list and reading pane. Not in print output — in normal
+on-screen use.
 
-### Constraint that decides the design
+Observed: Safari, `staging-mailviewer.patchable-account.workers.dev`, with
+`2-twelve-messages.mbox` loaded and message 1 open. A single unwrapped line of
+body text ("…onfirmed that no temporary repairs had been undertaken prior to
+inspection. Following the storm event of 12 March…") painted at roughly
+mid-viewport, clipped at the left edge and running off the right.
 
-**No submission form.** Any in-app form would need to POST somewhere, which
-requires relaxing `connect-src 'none'` and breaks the product's central
-guarantee. Do not add one, and do not add a third-party widget (Sentry,
-Intercom, a feedback SaaS) — same problem, plus it would fail the
-external-origins CI check. The contact must be a `mailto:` link, an external
-link to a GitHub issues page, or both.
+### Hypothesis — verify, don't assume
 
-Treat this as something to say out loud rather than apologize for: a line like
-"we have no error reporting, because the app can't send anything anywhere"
-reinforces the promise instead of reading as a missing feature.
+The off-screen print document is not fully contained. If it is hidden by
+position offset alone (e.g. `left: -10000px`) with no width constraint, and it
+renders body text in a non-wrapping element, one paragraph becomes a single line
+far wider than the offset, so the right-hand end of it re-enters the viewport.
+Clipped-at-the-left is the signature of an element starting left of the viewport
+origin. Chromium and Firefox lay this out differently, which is why they did not
+show it.
 
-### What to build
+### Fix direction
 
-- A persistent, discoverable contact affordance — footer link, or a small
-  "Report a problem" control in the header. Visible without opening a file,
-  since a user whose file failed to load may be looking at an empty state.
-- Surface it in the error path too. When a file fails to parse, that error
-  state should offer the report link right there. That is the moment a user
-  most wants it.
-- **Ask David for the address before hardcoding one.** A previous draft
-  invented `privacy@mailviewer.app`; do not assume any mailbox exists. If
-  there is no address yet, use the GitHub issues URL for the repo and flag it
-  in the PR.
+Contain it rather than merely displacing it: a zero-size, `overflow: hidden`
+wrapper, or keep it out of the render tree entirely except under
+`@media print`. Whatever the mechanism, the print document must have no
+on-screen visual footprint at any viewport size or zoom level.
 
-### mailto prefill — with a hard rule
+### Test that would have caught it
 
-Prefilling the subject and a diagnostic body block is worth doing: app version
-or commit SHA, browser and OS from the UA, and the *format* that failed
-(`pst`, `eml`, …).
-
-**Never include message content, filenames, sender or recipient addresses,
-subjects, or any bytes from the user's file.** A single leaked filename in a
-prefilled mail body would be a serious breach of the promise for a forensic
-tool. Whatever you assemble, write a test asserting the mailto body contains
-nothing derived from the loaded file.
-
-Add a short line near the link telling users not to attach confidential email
-files to a bug report, and to describe the problem instead. Their files are
-often privileged or evidentiary.
-
-If a build-time version identifier is not already exposed, wire the commit SHA
-in via Vite `define` so reports are traceable to a build.
+Assert the print container's bounding box is zero-area (or that it is not in the
+render tree) while on screen, in every engine. Add this even if the fix seems
+obviously correct — "the print fix drew garbage into the live UI" is a failure
+mode nothing currently asserts against.
 
 ---
 
-## Item 2 — Print to PDF only captures the first page
+## Bug 2 (P1) — `.msg` files still print only the first page
 
-Reported: printing (or Save as PDF) produces only the first page rather than
-the full message or thread.
+The original bug, unfixed for `.msg`. HTML-bodied `.eml` now paginates
+correctly; `.msg` does not.
 
-### Likely cause — verify before fixing
+### Hypothesis — verify, don't assume
 
-The message body is almost certainly rendered in an iframe. **Iframe content
-does not paginate across printed pages.** The browser prints the iframe's
-visible box and nothing beyond it, so a scrollable iframe yields exactly one
-page regardless of content length. Contributing factors to check: fixed
-heights or `100vh` on layout ancestors, `overflow: hidden|auto` on the
-scrolling container, and any virtualized list rendering only visible rows.
+`.msg` bodies commonly arrive as compressed RTF (hence `lzfu.ts` / `rtf.ts`) or
+plain text, and are likely rendered through a different element than sanitized
+HTML — a `<pre>` or similar rather than the iframe. If the print path measures
+and expands only the iframe, every non-HTML body is still clipped to one page.
 
-Confirm the actual mechanism before changing anything — reproduce with a long
-single message and with a long thread, in Chrome, Safari, and Firefox. They
-differ here.
+Note this predicts the bug is **not** `.msg`-specific — it should affect any
+plain-text or RTF-derived body, including a long plain-text `.eml`. Check that
+before scoping the fix to `.msg`; the earlier round of manual testing used
+HTML-bodied fixtures, which is likely why it went unnoticed.
 
-### Preferred fix
+The two bugs may share this root: a non-wrapping `<pre>` in the print document
+would explain both the missing pagination and the enormous width in Bug 1.
 
-**Keep the iframe.** It is a security boundary for untrusted third-party HTML,
-and dissolving it to make printing work would trade a real protection for a
-convenience. The standard approach that preserves it:
+### Fix direction
 
-1. On `beforeprint`, measure the body's full content height and set the iframe
-   element's height to it, so the parent document paginates a tall element
-   rather than clipping a short one.
-2. Add an `@media print` stylesheet that removes height and overflow
-   constraints from every ancestor of the body, hides chrome (list pane,
-   toolbar, search), and sets sensible margins.
-3. On `afterprint`, restore the previous height.
+Every body render path must be measured and paginated, not just the iframe path.
+Prefer one code path over per-format special-casing.
 
-**Constraint to resolve first:** if the iframe is sandboxed without
-`allow-same-origin`, the parent cannot read `contentDocument.scrollHeight`.
-Do not weaken the sandbox to get the measurement. Alternatives: measure the
-sanitized HTML in an offscreen element in the parent document, or use a
-separate hidden same-origin measuring iframe. If neither works, describe the
-constraint in the PR rather than loosening the sandbox.
+### Required test coverage before this is done
 
-### "The entire email chain"
+Existing print tests pass on all three engines and caught neither bug, so the
+assertions are insufficient — not the engine list.
 
-The report says the whole chain, so decide deliberately whether print means
-the current message or the whole thread, and make it explicit in the UI rather
-than implicit. For a forensic tool I would expect an explicit choice — "Print
-message" vs "Print thread" — since users are producing exhibits and need to
-know exactly what the artifact contains.
+Add:
 
-If printing a thread, every message must be expanded in the print output
-regardless of collapsed state on screen, in thread order, each with a visible
-header block (from, to, cc, date, subject) so a printed page is
-self-describing. A printed exhibit missing its headers is not much use.
+- Print container has no on-screen visual footprint (all engines).
+- A `.msg` fixture with a multi-page body, asserting page count > 1 and that the
+  final line of content is present in the generated PDF.
+- A long plain-text body (not HTML) with the same assertions.
+- RTF-derived body from `.msg`, same assertions.
+- Keep the existing HTML and 12-message mbox cases.
 
-### Verify against real output
+Assert against real generated PDF output — page count and last-line presence —
+not print preview or DOM state.
 
-Test by actually generating PDFs, not by eyeballing print preview. Playwright's
-`page.pdf()` in Chromium can assert page count and that content from the last
-message appears in the output. Cover: a long single message, a 10+ message
-thread, a message with a wide table (common in insurance and legal mail),
-and one with inline images.
+### Reproduction fixtures
+
+`1-long-single.eml` (long plain-text body), `2-twelve-messages.mbox`,
+`3-wide-table.eml`, `4-inline-images.eml` — each contains a unique end-marker
+string (`END-OF-DOCUMENT-MARKER`, `MESSAGE-12-END`, `WIDE-TABLE-END-MARKER`,
+`INLINE-IMAGES-END-MARKER`) so truncation is detectable by searching the PDF.
+Ask David for these. You will need to construct a `.msg` fixture yourself —
+there is no `.msg` in that set, which is part of how this was missed.
 
 ---
 
-## Both items
+## Constraints
 
-- Regression tests in the same commit as each fix.
-- The characterization snapshots must not move except where intended.
-- Re-run all three browsers.
-- Nothing added may introduce an external origin — the CI check will catch it,
-  but do not make it do that work.
-- Preview URL smoke-test before requesting approval. Note in the PR what David
-  should check by hand: print a real thread to PDF and open the result.
+- Smallest diff. No refactoring beyond what the fix requires.
+- Do not weaken the iframe sandbox or the CSP to make printing work.
+- Existing 265 unit tests must stay green; snapshots must not move except where
+  intended.
+- Nothing may introduce an external origin.
+- Note in the PR that **Safari must be re-checked by hand** on the new preview —
+  headless WebKit passed while real Safari failed, so automated coverage in that
+  engine is necessary but not sufficient here.
 
 ## Conventions
 
-- Git worktree; keep this PROMPT.md in the worktree root.
-- Bisect-clean commits, one concern each.
-- Dual validation: green CI and David's real-scenario verification.
+- Git worktree; keep this `PROMPT.md` in the worktree root.
+- Bisect-clean commits, one bug per commit, regression test in the same commit.
+- Dual validation: green CI and David's verification.
 - Remove the worktree after pushing.

@@ -151,3 +151,69 @@ export function threadMbox(count = 12) {
   }
   return out.join("\r\n");
 }
+
+/**
+ * A long message with **no HTML part at all**.
+ *
+ * The marker matches the one in David's `1-long-single.eml` so the assertions
+ * line up if that file is dropped in place of this generated one.
+ *
+ * This is the shape every earlier print fixture missed. A plain-text body does
+ * not render through the sandboxed frame -- it is a <pre> in the parent
+ * document -- so nothing about the iframe measuring path is exercised by it,
+ * and the <pre> brought its own problem: it did not wrap, which is what painted
+ * message text across the live UI.
+ */
+export function longPlainTextEml(paragraphs = 40, marker = "END-OF-DOCUMENT-MARKER") {
+  const body = Array.from({ length: paragraphs }, (_, i) =>
+    `Paragraph ${i + 1}. The surveyor confirmed that no temporary repairs had been ` +
+    `undertaken prior to inspection. Following the storm event of 12 March, the ` +
+    `affected elevation was photographed and measured, and the readings are ` +
+    `reproduced in the schedule appended to this correspondence.`,
+  ).join("\n\n");
+
+  return [
+    "From: Adjuster <adjuster@fixture.invalid>",
+    "To: Counsel <counsel@fixture.invalid>",
+    "Subject: Long plain-text message",
+    "Date: Tue, 3 Jun 2025 09:14:00 -0400",
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    body,
+    "",
+    marker,
+  ].join("\r\n");
+}
+
+/**
+ * A body that sizes itself against the viewport.
+ *
+ * Word- and Outlook-authored mail does this often enough to matter: `100vh`,
+ * an absolutely-positioned block pinned top-to-bottom, a percentage-height
+ * chain. Whatever the measuring frame is tall, such a body believes a page is,
+ * which is why the frame has to be a plausible page rather than a placeholder.
+ */
+export function viewportSizedEml(kind = "vh", paragraphs = 40, marker = "VIEWPORT-SIZED-END-MARKER") {
+  const body = Array.from({ length: paragraphs }, (_, i) =>
+    `<p>Paragraph ${i + 1}. The surveyor confirmed that no temporary repairs had been ` +
+    `undertaken prior to inspection.</p>`,
+  ).join("\n");
+
+  const wrapper = {
+    vh: `<div style="height:100vh;overflow:auto">`,
+    absolute: `<div style="position:absolute;top:0;left:0;right:0;bottom:0;overflow:auto">`,
+    fixed: `<div style="position:fixed;top:0;left:0;overflow:auto">`,
+  }[kind];
+
+  return [
+    "From: Adjuster <adjuster@fixture.invalid>",
+    "To: Counsel <counsel@fixture.invalid>",
+    `Subject: Viewport-sized body (${kind})`,
+    "Date: Tue, 3 Jun 2025 09:14:00 -0400",
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    `${wrapper}${body}<p>${marker}</p></div>`,
+  ].join("\r\n");
+}

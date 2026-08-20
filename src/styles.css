@@ -997,17 +997,39 @@ pre.code .hl { color: var(--teal); }
 /*
  * The printable document.
  *
- * Held off-screen rather than hidden. A frame inside `display: none` is not
- * laid out, so it never loads and never has a height to measure -- and the
- * whole fix depends on the frames being loaded and measured *before* the
- * browser asks for pages, because nothing can be loaded during beforeprint.
+ * Contained rather than hidden, and contained rather than merely displaced.
+ *
+ * It cannot be `display: none`: a frame that is not laid out never loads and
+ * never has a height to measure, and the whole fix depends on the frames being
+ * measured *before* the browser asks for pages, because nothing can be loaded
+ * during beforeprint.
+ *
+ * It also cannot simply be pushed off-screen. The document is laid out at print
+ * width, and a plain-text body inside it is a <pre>; before this rule existed,
+ * that <pre> did not wrap on screen, so one paragraph became a single line
+ * thousands of pixels wide that overflowed its box and painted its right-hand
+ * end back inside the viewport, across the live app. A zero-size box that
+ * clips its overflow has nothing to leak into, at any viewport width or zoom.
  */
-.printout {
+.printout-shell {
   position: absolute;
-  left: -200vw;
+  left: 0;
   top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 .printout iframe { width: 100%; border: 0; display: block; background: #fff; }
+
+/* Applies on screen as well as on paper. The off-screen copy and the printed
+   copy should lay out identically -- the off-screen one is what gets measured,
+   so any difference between them is a difference between the height we measure
+   and the height we print. */
+.printmsg-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
 
 @media print {
   /* 12mm, matching PRINT_CONTENT_WIDTH_PX in src/lib/printing.ts. Change one
@@ -1021,19 +1043,23 @@ pre.code .hl { color: var(--teal); }
    * as it did -- these rules are about replacing the viewer's layout, and the
    * viewer is the only place that layout exists.
    */
-  body:has(.printout) { background: #fff !important; }
+  body:has(.printout-shell) { background: #fff !important; }
 
   /* The viewer's own layout is a three-pane grid inside calc(100vh - 57px)
      with scrolling panes, which is what clipped printing to a single page. It
      is not adapted for paper; it is replaced for paper. */
-  body:has(.printout) .topbar,
+  body:has(.printout-shell) .topbar,
   .viewer-wrap > .warnbar,
   .viewer,
   .drop-hint { display: none !important; }
 
-  .printout {
+  .printout-shell {
     position: static !important;
-    left: auto !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .printout {
     width: auto !important;
     color: #16161a;
   }
@@ -1074,11 +1100,8 @@ pre.code .hl { color: var(--teal); }
   .printmsg-head dt { color: #6a6a78; }
   .printmsg-head dd { margin: 0; color: #16161a; overflow-wrap: anywhere; }
   .printmsg-body pre {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
     font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
     color: #16161a;
-    margin: 0;
   }
   .printmsg-empty { font-style: italic; color: #6a6a78; }
 }

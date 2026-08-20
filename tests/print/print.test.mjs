@@ -1,8 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, firefox, webkit } from "playwright";
+import { Buffer } from "node:buffer";
 import { join } from "node:path";
 import { pageCount, containsText } from "./pdf.mjs";
-import { inlineImagesEml, longMessageEml, threadMbox, wideTableEml } from "./fixtures.mjs";
+import {
+  inlineImagesEml,
+  longMessageEml,
+  longPlainTextEml,
+  threadMbox,
+  viewportSizedEml,
+  wideTableEml,
+} from "./fixtures.mjs";
+import { msgHtml, msgPlainText, msgRtfEncapsulatedHtml, msgRtfText } from "./msgFixture.mjs";
 import {
   WORK,
   choosePrintList,
@@ -183,12 +192,10 @@ describe("the rest of the app", () => {
       horizontalScroll:
         document.documentElement.scrollWidth > document.documentElement.clientWidth,
       viewerVisible: document.querySelector(".viewer").getBoundingClientRect().height > 0,
-      printoutOffScreen: document.querySelector(".printout").getBoundingClientRect().right < 0,
     }));
 
     expect(screen.horizontalScroll).toBe(false);
     expect(screen.viewerVisible).toBe(true);
-    expect(screen.printoutOffScreen).toBe(true);
     await page.close();
   }, 120000);
 
@@ -205,6 +212,127 @@ describe("the rest of the app", () => {
     expect(state.topbar).toBe("flex");
     await page.close();
   }, 120000);
+});
+
+/**
+ * The print document must not be visible on screen.
+ *
+ * This is asserted directly rather than inferred from the container's
+ * position, because inferring it is exactly how it was missed: the container
+ * sat off-screen with a 703px-wide box, and a <pre> inside it overflowed that
+ * box by thousands of pixels and painted its right-hand end back across the
+ * live app. Every geometric assertion about the *box* passed while message
+ * text was being drawn over the message list.
+ *
+ * So the test removes the print document and compares the pixels. If the print
+ * document is drawing anything a user can see, the two screenshots differ --
+ * whatever the mechanism, and without needing to predict it.
+ */
+describe("the print document has no on-screen footprint", () => {
+  const engines = [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]];
+
+  for (const [name, type] of engines) {
+    it(`paints nothing in the viewport in ${name}`, async () => {
+      const browser2 = await type.launch();
+      try {
+        const page = await browser2.newPage({ viewport: { width: 1280, height: 900 } });
+        // A plain-text body: the shape that produced the unwrapped line.
+        const file = scratchFile("plain.eml", longPlainTextEml(40));
+        await openAndPrepare(page, server.origin, file, { expectFrames: 0 });
+
+        const geometry = await page.evaluate(() => {
+          const shell = document.querySelector(".printout-shell");
+          const box = shell.getBoundingClientRect();
+          return {
+            area: Math.round(box.width * box.height),
+            overflow: getComputedStyle(shell).overflow,
+            // Content that cannot overflow its box cannot escape the clip.
+            unwrapped: [...shell.querySelectorAll("pre")]
+              .filter((pre) => pre.scrollWidth > Math.ceil(pre.getBoundingClientRect().width))
+              .length,
+          };
+        });
+
+        expect(geometry.area).toBe(0);
+        expect(geometry.overflow).toBe("hidden");
+        expect(geometry.unwrapped).toBe(0);
+
+        const withPrintDocument = await page.screenshot();
+        await page.evaluate(() => document.querySelector(".printout-shell").remove());
+        const withoutPrintDocument = await page.screenshot();
+
+        expect(
+          Buffer.compare(withPrintDocument, withoutPrintDocument),
+          "removing the print document changed what is on screen, so it was painting there",
+        ).toBe(0);
+      } finally {
+        await browser2.close();
+      }
+    }, 180000);
+  }
+});
+
+/**
+ * Bodies that never reach the sandboxed frame.
+ *
+ * Every print fixture before this one was HTML, so every one of them exercised
+ * the iframe path and none of them exercised the other two. A .msg in
+ * particular can arrive as any of four different body shapes depending on what
+ * Outlook wrote, and which shape you get decides which render path runs.
+ */
+describe("non-HTML bodies", () => {
+  const cases = [
+    ["a long plain-text .eml", "plain.eml", () => longPlainTextEml(40), "END-OF-DOCUMENT-MARKER"],
+    ["a .msg carrying only PidTagBody text", "plain.msg", () => Buffer.from(msgPlainText(40)), "MSG-PLAIN-END-MARKER"],
+    ["a .msg carrying PidTagBodyHtml", "html.msg", () => Buffer.from(msgHtml(40)), "MSG-HTML-END-MARKER"],
+    ["a .msg whose body is genuine RTF", "rtf.msg", () => Buffer.from(msgRtfText(40)), "MSG-RTF-TEXT-END-MARKER"],
+    ["a .msg whose body is HTML encapsulated in RTF", "rtfhtml.msg", () => Buffer.from(msgRtfEncapsulatedHtml(40)), "MSG-RTF-HTML-END-MARKER"],
+  ];
+
+  for (const [label, filename, build, marker] of cases) {
+    it(`paginates ${label}`, async () => {
+      const file = scratchFile(filename, build());
+      const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await openAndPrepare(page, server.origin, file, { expectFrames: 0 });
+      const pdf = await pdfFromChromium(page, `${filename}.pdf`);
+
+      expect(errors).toEqual([]);
+      expect(pageCount(pdf)).toBeGreaterThan(1);
+      expect(containsText(pdf, "Paragraph 1.")).toBe(true);
+      // The end marker is the whole point: truncation is only detectable by
+      // looking for the last thing in the document.
+      expect(containsText(pdf, marker), `${label}: end marker missing from the PDF`).toBe(true);
+      await page.close();
+    }, 180000);
+  }
+});
+
+/**
+ * The measuring frame has to be the size of a page.
+ *
+ * A message body can size itself against the viewport, and whatever the
+ * measuring frame is tall is what that CSS believes a page to be. The frame
+ * used to be 10px tall as a placeholder, so a `100vh` body reported about 64px
+ * of content and printed as a single near-empty page however much text it held
+ * -- the reported symptom exactly, and reachable from any format, not just the
+ * one it was noticed in.
+ */
+describe("bodies that size themselves against the viewport", () => {
+  for (const kind of ["vh", "absolute", "fixed"]) {
+    it(`measures a page rather than a sliver for a ${kind}-sized body`, async () => {
+      const file = scratchFile(`viewport-${kind}.eml`, viewportSizedEml(kind));
+      const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      await openAndPrepare(page, server.origin, file);
+      const [measured] = await measuredHeights(page);
+
+      // The defect produced ~64px. A page is ~1032px; anything in between is
+      // the frame being treated as a viewport-sized sliver again.
+      expect(measured).toBeGreaterThanOrEqual(900);
+      await page.close();
+    }, 180000);
+  }
 });
 
 describe("other engines", () => {
