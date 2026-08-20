@@ -7,6 +7,8 @@ import { highlight } from "../lib/highlight";
 import MessageView from "./MessageView";
 import { ReportBlock } from "./ReportProblem";
 import { formatFromFilename } from "../lib/report";
+import PrintOut from "./PrintOut";
+import { type PrintScope, messagesToPrint } from "../lib/printing";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
   return [{ folder: f, depth }, ...f.children.flatMap((c) => flattenFolders(c, depth + 1))];
@@ -46,6 +48,14 @@ export default function Viewer() {
   const [messageId, setMessageId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // What the next print job covers. Kept at "message" between jobs so that a
+  // browser-initiated print -- Cmd-P, File > Print -- has a prepared, measured
+  // document waiting for it rather than needing work done during beforeprint,
+  // which is too late to load anything.
+  const [printScope, setPrintScope] = useState<PrintScope>("message");
+  // A ref rather than state: nothing renders differently while a job is queued,
+  // and it must be readable from the readiness callback without re-subscribing.
+  const printPending = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const nextKey = useRef(0);
   const busy = useRef(false);
@@ -156,6 +166,28 @@ export default function Viewer() {
   );
 
   const pickFiles = () => inputRef.current?.click();
+
+  const requestPrint = useCallback((scope: PrintScope) => {
+    printPending.current = true;
+    setPrintScope(scope);
+  }, []);
+
+  // Fired once every message in the job has been measured. Printing before that
+  // would hand the browser frames of unknown height, which is the bug this is
+  // fixing.
+  const onPrintReady = useCallback(() => {
+    if (!printPending.current) return;
+    printPending.current = false;
+    window.print();
+  }, []);
+
+  // Drop back to the cheap single-message document once a job is done, so a
+  // hundred off-screen frames are not left rendered for the rest of the session.
+  useEffect(() => {
+    const reset = () => setPrintScope("message");
+    addEventListener("afterprint", reset);
+    return () => removeEventListener("afterprint", reset);
+  }, []);
 
   const hiddenInput = (
     <input
@@ -363,7 +395,12 @@ export default function Viewer() {
 
         <main className="pane">
           {selected ? (
-            <MessageView message={selected} query={query} />
+            <MessageView
+              message={selected}
+              query={query}
+              listedCount={visible.length}
+              onPrint={requestPrint}
+            />
           ) : (
             <div className="empty">Select a message.</div>
           )}
@@ -371,6 +408,12 @@ export default function Viewer() {
       </div>
 
       {dragOver && <div className="drop-hint">Drop to add more files</div>}
+
+      <PrintOut
+        messages={messagesToPrint(printScope, selected, visible)}
+        listedCount={visible.length}
+        onReady={onPrintReady}
+      />
     </div>
   );
 }

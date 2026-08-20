@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Address, Attachment, Message } from "../lib/model";
 import { buildIframeDocument, sanitizeMessageHtml } from "../lib/sanitize";
 import { countMatches, highlight, highlightHtml } from "../lib/highlight";
+import { type PrintScope, listScopeLabel } from "../lib/printing";
 
 type Tab = "message" | "headers" | "source";
 
@@ -50,7 +51,18 @@ function AttachmentChip({ att }: { att: Attachment }) {
   );
 }
 
-export default function MessageView({ message, query = "" }: { message: Message; query?: string }) {
+export default function MessageView({
+  message,
+  query = "",
+  listedCount,
+  onPrint,
+}: {
+  message: Message;
+  query?: string;
+  /** How many messages the current folder/search shows, for the print menu. */
+  listedCount: number;
+  onPrint: (scope: PrintScope) => void;
+}) {
   const [tab, setTab] = useState<Tab>("message");
 
   useEffect(() => setTab("message"), [message.id]);
@@ -147,6 +159,34 @@ export default function MessageView({ message, query = "" }: { message: Message;
               Raw source
             </button>
           )}
+
+          {/*
+            Printing offers an explicit choice rather than guessing. Someone
+            producing an exhibit needs to know exactly what is in it, and "print"
+            meaning "whatever happened to be on screen" is not good enough when
+            the artifact outlives the session that made it.
+          */}
+          <details className="printmenu">
+            <summary title="Print or save as PDF">Print</summary>
+            <div className="printmenu-pop">
+              <button
+                onClick={(e) => {
+                  e.currentTarget.closest("details")?.removeAttribute("open");
+                  onPrint("message");
+                }}
+              >
+                This message
+              </button>
+              <button
+                onClick={(e) => {
+                  e.currentTarget.closest("details")?.removeAttribute("open");
+                  onPrint("list");
+                }}
+              >
+                {listScopeLabel(listedCount)}
+              </button>
+            </div>
+          </details>
         </div>
       </div>
 
