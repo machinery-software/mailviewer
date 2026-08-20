@@ -121,10 +121,13 @@ function PrintMessage({ message, onMeasured }: {
  * already measured by the time the browser asks for a page, and no code has to
  * run during `beforeprint` to make it come out right.
  */
-export default function PrintOut({ messages, listedCount, onReady }: {
+export default function PrintOut({ messages, listedCount, active, onReadyChange }: {
   messages: Message[];
   listedCount: number;
-  onReady: () => void;
+  /** Whether this is the document a print job would currently produce. */
+  active: boolean;
+  /** Reports whether this document is fully measured and safe to print. */
+  onReadyChange: (ready: boolean) => void;
 }) {
   const [heights, setHeights] = useState<Record<string, number>>({});
 
@@ -133,12 +136,26 @@ export default function PrintOut({ messages, listedCount, onReady }: {
     [],
   );
 
-  const ids = messages.map((m) => m.id).join("|");
   const ready = messages.length > 0 && messages.every((m) => m.id in heights);
 
+  /*
+    Readiness is reported as a state, not as a one-shot "now you may print".
+    It used to be the latter -- an effect that called back on the edge where
+    `ready` became true -- and printing was triggered from inside that callback.
+    Nothing about the document changes when a user clicks "This message" on a
+    document that is already built, so the effect did not re-run and the print
+    never happened at all. Worse, the request stayed pending: the next unrelated
+    change that did move the document -- selecting another message -- re-fired
+    the effect and opened the print dialog then, which is what "the dialog
+    appears on the next interaction" was.
+
+    Reporting a state instead means the caller can look at it at the moment of
+    the click rather than waiting to be told.
+  */
   useEffect(() => {
-    if (ready) onReady();
-  }, [ready, ids, onReady]);
+    onReadyChange(ready);
+    return () => onReadyChange(false);
+  }, [ready, onReadyChange]);
 
   if (messages.length === 0) return null;
 
@@ -154,7 +171,7 @@ export default function PrintOut({ messages, listedCount, onReady }: {
       into -- while still leaving the contents laid out and loaded, which is
       what the measuring depends on.
     */
-    <div className="printout-shell" aria-hidden="true">
+    <div className={`printout-shell ${active ? "is-active" : ""}`} aria-hidden="true">
       <div className="printout" style={{ width: PRINT_CONTENT_WIDTH_PX }}>
         <div className="printout-head">
           <strong>mailviewer</strong>

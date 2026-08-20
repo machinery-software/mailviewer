@@ -47,7 +47,9 @@ export async function openAndPrepare(page, origin, file, { expectFrames = 1 } = 
 export function waitForMeasured(page, expectFrames) {
   return page.waitForFunction(
     (n) => {
-      const shell = document.querySelector(".printout-shell");
+      // The active document is the one a print job would produce. While the
+      // print menu is open there is a second, inactive one alongside it.
+      const shell = document.querySelector(".printout-shell.is-active");
       if (!shell || !shell.querySelector(".printmsg")) return false;
       const frames = [...shell.querySelectorAll("iframe")];
       if (frames.length < n) return false;
@@ -61,24 +63,79 @@ export function waitForMeasured(page, expectFrames) {
 /** Heights the app decided each printed body needs, in document order. */
 export function measuredHeights(page) {
   return page.evaluate(() =>
-    [...document.querySelectorAll(".printout iframe")].map((f) => parseInt(f.style.height, 10)),
+    [...document.querySelectorAll(".printout-shell.is-active iframe")].map((f) =>
+      parseInt(f.style.height, 10),
+    ),
   );
 }
 
-/** Choose "all listed" from the print menu, stubbing the print dialog. */
-export async function choosePrintList(page) {
-  await page.evaluate(() => {
-    // window.print() opens a modal the test cannot dismiss. Record the call --
-    // that it happens at all, and only once ready, is part of what is asserted.
-    window.__printCalls = 0;
+/**
+ * Stub the print dialog, recording each call and -- the part that matters --
+ * whether it happened inside the click that asked for it.
+ */
+export function stubPrint(page) {
+  return page.evaluate(() => {
+    // window.print() opens a modal the test cannot dismiss. Recording the call
+    // is not enough on its own: the broken build called it too, just a task
+    // late, and a browser defers the modal to the next interaction when the
+    // gesture has lapsed.
+    window.__printCalls = [];
+    window.__gestureAt = null;
+    window.__inGesture = false;
+    document.addEventListener(
+      "click",
+      () => {
+        window.__gestureAt = performance.now();
+        window.__inGesture = true;
+        // Cleared on the next task. Anything that had to await -- a frame load,
+        // a measurement, even an already-resolved promise -- lands after this
+        // runs, so the flag answers "inside the click, or merely soon after it"
+        // with no timing threshold to tune.
+        setTimeout(() => {
+          window.__inGesture = false;
+        }, 0);
+      },
+      true,
+    );
     window.print = () => {
-      window.__printCalls++;
+      window.__printCalls.push({
+        duringGesture: window.__inGesture,
+        sinceGestureMs:
+          window.__gestureAt === null ? null : performance.now() - window.__gestureAt,
+        activationLive: navigator.userActivation ? navigator.userActivation.isActive : null,
+      });
     };
   });
+}
+
+/** Open the print menu and wait until the given scope can actually be printed. */
+export async function openPrintMenu(page, scope) {
+  const index = scope === "message" ? 0 : 1;
   await page.locator(".printmenu > summary").click();
-  const label = await page.locator(".printmenu-pop button").nth(1).textContent();
-  await page.locator(".printmenu-pop button").nth(1).click();
+  await page.locator(".printmenu-pop button").nth(index).waitFor({ state: "visible" });
+  await page.waitForFunction(
+    (i) => !document.querySelectorAll(".printmenu-pop button")[i].disabled,
+    index,
+    { timeout: 60000 },
+  );
+  return index;
+}
+
+/** Click a scope option and return what the control said it would do. */
+export async function choosePrintScope(page, scope) {
+  const index = await openPrintMenu(page, scope);
+  const option = page.locator(".printmenu-pop button").nth(index);
+  // The "Preparing…" hint is a child of the button and is gone by now; strip it
+  // anyway so the assertion stays about what the option is called.
+  const label = (await option.textContent()).replace("Preparing…", "").trim();
+  await option.click();
   return label;
+}
+
+/** Choose the all-messages scope, stubbing the print dialog first. */
+export async function choosePrintList(page) {
+  await stubPrint(page);
+  return choosePrintScope(page, "list");
 }
 
 /**

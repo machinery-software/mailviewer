@@ -1,121 +1,153 @@
-# mailviewer.app — two print bugs from the PR #2 staging preview
+# mailviewer.app — print dialog deferred; user activation lost before print()
 
-Found on the staging preview of PR #2 (`fix/support-and-print`). Both block the
-deploy. Bug 1 is a visible regression introduced by the print fix itself, so
-this cannot ship as-is.
+Blocks the deploy. Found on `staging2-mailviewer.patchable-account.workers.dev`,
+the preview built from `fix/print-onscreen-leak-and-nonhtml` (PR #3).
 
-Not deployed, not merged. Production remains on version
-`9b24838a-47b8-4516-84dd-92fc0f193eee` (commit `7d30a90`).
+Production remains on `9b24838a-47b8-4516-84dd-92fc0f193eee` (commit `7d30a90`).
 
 **Never deploy. Never self-merge.** Output is a PR.
 
----
+## Symptom
 
-## Bug 1 (P0) — print container leaks into the on-screen UI in Safari
+The **Print ▾** control opens and both scope options render ("This message",
+"All N messages listed"). Clicking either does nothing at all — no system print
+dialog, no visible change, no error dialog. Observed in Safari.
 
-A line of message body text renders across the middle of the live app window,
-overlapping the message list and reading pane. Not in print output — in normal
-on-screen use.
+Crucially: **the dialog appears on the next interaction.** Click a scope option,
+nothing happens; click anything else on the page, and the print dialog opens.
+The call is not failing — it is being deferred.
 
-Observed: Safari, `staging-mailviewer.patchable-account.workers.dev`, with
-`2-twelve-messages.mbox` loaded and message 1 open. A single unwrapped line of
-body text ("…onfirmed that no temporary repairs had been undertaken prior to
-inspection. Following the storm event of 12 March…") painted at roughly
-mid-viewport, clipped at the left edge and running off the right.
+Printing works for `.mbox` and fails this way for `.msg`. The `.msg` body renders
+correctly on screen; only printing is affected.
 
-### Hypothesis — verify, don't assume
+Reproduces in both Safari and Chrome. This is not a WebKit quirk — Chromium
+enforces transient user activation for `print()` on the same terms, which is
+exactly what the activation hypothesis below predicts. It also means you can
+reproduce and regression-test this in headless Chromium; real Safari is not
+required to verify the fix, though David will still check it by hand.
 
-The off-screen print document is not fully contained. If it is hidden by
-position offset alone (e.g. `left: -10000px`) with no width constraint, and it
-renders body text in a non-wrapping element, one paragraph becomes a single line
-far wider than the offset, so the right-hand end of it re-enters the viewport.
-Clipped-at-the-left is the signature of an element starting left of the viewport
-origin. Chromium and Firefox lay this out differently, which is why they did not
-show it.
+## Hypothesis — strong, but verify
 
-### Fix direction
+The print dialog does eventually appear: clicking a scope option does nothing,
+and then the next click anywhere in the page brings up the print dialog. So
+`window.print()` is being called — it is being *deferred*.
 
-Contain it rather than merely displacing it: a zero-size, `overflow: hidden`
-wrapper, or keep it out of the render tree entirely except under
-`@media print`. Whatever the mechanism, the print document must have no
-on-screen visual footprint at any viewport size or zoom level.
+That is the signature of losing **transient user activation**. WebKit only opens
+the print modal while a user gesture is still live (a few seconds). If the click
+handler performs async work first — constructing the off-screen print document,
+awaiting a frame `load` event, measuring content height — the activation can
+expire before `print()` runs, and Safari defers the modal until the next user
+interaction.
 
-### Test that would have caught it
+This explains the format split without any format-specific bug: `.msg` bodies
+require binary `PidTagBodyHtml` decoding and/or RTF conversion and are larger, so
+the prepare step overruns the activation window that `.mbox` completes inside.
+`.mbox` is not correct — it is merely fast enough. A large enough `.mbox` or
+`.pst` message should fail the same way. Treat this as one latent bug affecting
+all formats, not a `.msg` bug.
 
-Assert the print container's bounding box is zero-area (or that it is not in the
-render tree) while on screen, in every engine. Add this even if the fix seems
-obviously correct — "the print fix drew garbage into the live UI" is a failure
-mode nothing currently asserts against.
+Verify by measuring the elapsed time between the click handler starting and
+`print()` being called, per format. **Do not scope the fix to `.msg`.**
 
----
+## Fix direction
 
-## Bug 2 (P1) — `.msg` files still print only the first page
+**Do no async work between the user gesture and `window.print()`.**
 
-The original bug, unfixed for `.msg`. HTML-bodied `.eml` now paginates
-correctly; `.msg` does not.
+Prepare the print document when the menu *opens* — that is itself a user
+gesture, and it gives the frame time to load and be measured while the user is
+reading the options. Clicking a scope option then calls `print()` synchronously
+against an already-built document. Rebuild or invalidate when the selected
+message or scope changes.
 
-### Hypothesis — verify, don't assume
+If any preparation must remain in the option-click path, it has to complete
+synchronously. Anything awaiting a `load` event does not qualify.
 
-`.msg` bodies commonly arrive as compressed RTF (hence `lzfu.ts` / `rtf.ts`) or
-plain text, and are likely rendered through a different element than sanitized
-HTML — a `<pre>` or similar rather than the iframe. If the print path measures
-and expands only the iframe, every non-HTML body is still clipped to one page.
+Both PR #3 fixes must survive: the container stays invisible on screen at every
+width and zoom, and non-HTML and viewport-pinned bodies still paginate fully.
 
-Note this predicts the bug is **not** `.msg`-specific — it should affect any
-plain-text or RTF-derived body, including a long plain-text `.eml`. Check that
-before scoping the fix to `.msg`; the earlier round of manual testing used
-HTML-bodied fixtures, which is likely why it went unnoticed.
+Also keep both constraints from PR #3 satisfied at once: the print container must
+be invisible on screen at every viewport width and zoom level, **and** laid out
+enough that frames inside it load and can be measured. Do not trade one for the
+other.
 
-The two bugs may share this root: a non-wrapping `<pre>` in the print document
-would explain both the missing pagination and the enormous width in Bug 1.
+## Scope: every format, not just `.msg`
 
-### Fix direction
+Fix this for all supported message types. `.msg` is where it surfaced, not where
+it lives. The bug is in the shared path between the scope-option click and
+`window.print()`, and every format traverses it. `.mbox` passes only because its
+prepare step happens to finish inside the activation window — a large enough
+`.mbox` message should fail identically. Confirm that; it is the cheapest way to
+prove the diagnosis.
 
-Every body render path must be measured and paginated, not just the iframe path.
-Prefer one code path over per-format special-casing.
+A `.msg`-only fix or special case is not acceptable. It would leave the defect in
+place for every other format while appearing resolved.
 
-### Required test coverage before this is done
+Formats to cover, per the parsers in this repo: `.eml`, `.emlx`, `.msg`, `.oft`,
+`.mbox`, `.pst`, `.ost`, `.olm`, `.mht`/`.mhtml`, and TNEF (`winmail.dat`). Body
+shapes that reach the renderer differently and must each be exercised: sanitized
+HTML, plain text, RTF-derived HTML (lzfu → rtf), `PidTagBodyHtml` stored as
+`PT_BINARY`, and viewport-pinned wrapper CSS (`height: 100vh`).
 
-Existing print tests pass on all three engines and caught neither bug, so the
-assertions are insufficient — not the engine list.
+Both print scopes — "This message" and "All N messages listed" — for each. The
+all-messages scope does proportionally more preparation work, so it is the most
+likely to exceed the activation window and the most important to measure. If
+preparation time scales with message count, say so explicitly in the PR and
+state where the ceiling is.
 
-Add:
+## The test gap that let this through — fix this too
 
-- Print container has no on-screen visual footprint (all engines).
-- A `.msg` fixture with a multi-page body, asserting page count > 1 and that the
-  final line of content is present in the generated PDF.
-- A long plain-text body (not HTML) with the same assertions.
-- RTF-derived body from `.msg`, same assertions.
-- Keep the existing HTML and 12-message mbox cases.
+The existing 23 print tests generate PDFs via Playwright's `page.pdf()`, which
+does not exercise the application's own print controls at all. Every one of them
+passed while the user-facing button was completely non-functional.
 
-Assert against real generated PDF output — page count and last-line presence —
-not print preview or DOM state.
+This is the third time in this sequence that green tests measured something
+other than the thing users touch. Add tests that:
 
-### Reproduction fixtures
+- **Drive the actual UI control** — click Print ▾, click each scope option, and
+  assert the print flow is invoked (stub `window.print` and assert it was
+  called, with the expected scope). Do this per format: `.eml`, `.mbox`, and
+  `.msg` in each of its body shapes — and the rest of the formats listed under
+  Scope above. Asserting `print()` was called is **not sufficient** — it is
+  being called today, and the feature is still broken. The test must assert it
+  is called **while user activation is still valid**: synchronously within the
+  click handler's gesture, with no awaited work in between. Assert on elapsed
+  time between gesture and call, or on `navigator.userActivation.isActive` at
+  the moment of the call. A test that only checks "print was invoked" passes on
+  the current broken build.
+- **Assert the flow completes rather than hangs** — fail on timeout, so a
+  never-resolving promise is a test failure and not a silent pass.
+- **Assert the frames inside the print container actually load** (`load` event
+  fires, measured height is greater than a trivial placeholder).
+- **Keep the Bug 1 assertion from PR #3** — screenshot comparison with and
+  without the print document present.
+- **Keep the existing page-count and end-marker assertions** against real
+  generated PDFs.
 
-`1-long-single.eml` (long plain-text body), `2-twelve-messages.mbox`,
-`3-wide-table.eml`, `4-inline-images.eml` — each contains a unique end-marker
-string (`END-OF-DOCUMENT-MARKER`, `MESSAGE-12-END`, `WIDE-TABLE-END-MARKER`,
-`INLINE-IMAGES-END-MARKER`) so truncation is detectable by searching the PDF.
-Ask David for these. You will need to construct a `.msg` fixture yourself —
-there is no `.msg` in that set, which is part of how this was missed.
+Run across all three engines. Note that headless WebKit has already passed once
+while real Safari failed, so David re-tests Safari by hand regardless.
 
----
+## Fixtures
+
+David has `.eml`, `.mbox` and `.msg` fixtures with unique end-marker strings.
+Fixtures do not exist yet for `.emlx`, `.oft`, `.pst`/`.ost`, `.olm`, `.mht` or
+TNEF — build them, since the scope above requires covering those paths too.
+Existing fixture markers (`END-OF-DOCUMENT-MARKER`, `MESSAGE-12-END`,
+`WIDE-TABLE-END-MARKER`, `INLINE-IMAGES-END-MARKER`, `MSG-WORD-END-MARKER`,
+`MSG-PLAIN-END-MARKER`, `MSG-HTML-END-MARKER`). Ask for them rather than
+rebuilding — the `.msg` set includes a Word-style body with `height: 100vh`
+wrapper CSS built specifically to exercise the measuring-frame collapse you
+diagnosed.
 
 ## Constraints
 
-- Smallest diff. No refactoring beyond what the fix requires.
-- Do not weaken the iframe sandbox or the CSP to make printing work.
-- Existing 265 unit tests must stay green; snapshots must not move except where
-  intended.
+- Smallest diff. No refactoring beyond the fix.
+- Do not weaken the iframe sandbox or the CSP.
+- 267 unit tests stay green.
 - Nothing may introduce an external origin.
-- Note in the PR that **Safari must be re-checked by hand** on the new preview —
-  headless WebKit passed while real Safari failed, so automated coverage in that
-  engine is necessary but not sufficient here.
 
 ## Conventions
 
 - Git worktree; keep this `PROMPT.md` in the worktree root.
-- Bisect-clean commits, one bug per commit, regression test in the same commit.
+- Bisect-clean commits, regression test in the same commit as the fix.
 - Dual validation: green CI and David's verification.
 - Remove the worktree after pushing.
