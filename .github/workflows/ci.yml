@@ -1,7 +1,14 @@
 name: CI
 
-# Runs on every PR and on main. This is the gate: deploy.yml will not run its
-# production job unless the same checks below have passed.
+# Runs on every PR and on main. This is the only workflow in the repository, and
+# it is the gate: it decides whether a change is fit to release, and a human
+# decides whether to release it.
+#
+# Deploying is deliberately not automated. Releases are made by hand with
+# `wrangler versions upload` followed by `wrangler versions deploy` -- see
+# DEPLOYMENT.md. That means this workflow needs no Cloudflare credentials at
+# all, so there is no token in this repository to leak, mis-scope or rotate, and
+# no code path by which a green build can reach real users on its own.
 on:
   pull_request:
   push:
@@ -95,86 +102,3 @@ jobs:
           name: dist-${{ github.sha }}
           path: dist/
           retention-days: 7
-
-  # --------------------------------------------------------------------------
-  # PR preview.
-  #
-  # This uploads a Worker *version* without giving it any production traffic.
-  # `wrangler versions upload` is specifically the no-traffic half of the
-  # deploy: a version exists and gets its own preview URL, but the live
-  # deployment is untouched until someone runs `versions deploy`.
-  #
-  # Deliberately gated on the PR coming from this repository. A PR from a fork
-  # must not get access to the Cloudflare token, and using `pull_request`
-  # (not `pull_request_target`) means fork PRs run without secrets anyway --
-  # the explicit condition makes the intent obvious rather than incidental.
-  # --------------------------------------------------------------------------
-  preview:
-    name: Upload preview version
-    needs: verify
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Upload version (no production traffic)
-        id: upload
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          npx wrangler versions upload \
-            --message "PR #${{ github.event.pull_request.number }} (${{ github.sha }})" \
-            2>&1 | tee upload.log
-
-          # Preview URLs are enabled on this Worker (previews_enabled: true),
-          # so the upload prints a per-version URL on the account subdomain.
-          # Parsed rather than constructed, because the version-prefix scheme is
-          # wrangler's to choose and not something we should hardcode.
-          url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' upload.log | head -1 || true)"
-          vid="$(grep -oiE 'version id:?[[:space:]]*[0-9a-f-]{36}' upload.log | grep -oE '[0-9a-f-]{36}' | head -1 || true)"
-          echo "preview_url=$url" >> "$GITHUB_OUTPUT"
-          echo "version_id=$vid" >> "$GITHUB_OUTPUT"
-          if [ -z "$url" ]; then
-            echo "::warning::Could not parse a preview URL from the wrangler output."
-          fi
-
-      - name: Comment preview URL on the PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const url = '${{ steps.upload.outputs.preview_url }}';
-            const vid = '${{ steps.upload.outputs.version_id }}';
-            const marker = '<!-- mailviewer-preview -->';
-            const body = url
-              ? `${marker}\n### Preview\n\n${url}\n\n` +
-                `Version \`${vid || 'unknown'}\` — uploaded, **not** serving production traffic.\n\n` +
-                `Worth checking by hand: open a \`.eml\`, a \`.msg\` and a \`.pst\`; confirm the ` +
-                `Network panel shows no third-party request; confirm the CSP self-test on the ` +
-                `privacy page still reports the fetch as blocked.`
-              : `${marker}\n### Preview\n\nUpload succeeded but no preview URL could be parsed ` +
-                `from the wrangler output. Check the job log.`;
-
-            const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const existing = (await github.rest.issues.listComments({owner, repo, issue_number}))
-              .data.find(c => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-            } else {
-              await github.rest.issues.createComment({owner, repo, issue_number, body});
-            }

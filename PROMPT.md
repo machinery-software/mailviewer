@@ -84,3 +84,36 @@ Do not enable anything. The PR should be safe to sit unmerged indefinitely.
 - Bisect-clean commits.
 - Dual validation: green CI and David's verification before merge.
 - After pushing the branch and opening the PR, remove the worktree.
+
+---
+
+## Addendum, 2026-08-20 — scope changed after review
+
+David's decision on reviewing the above:
+
+> Split PR #1. Delete `deploy.yml` entirely — deploys stay manual via
+> `wrangler versions upload` / `versions deploy`. Keep `ci.yml`, triggered on
+> `pull_request` and push to `main`, and move the `connect-src 'none'` privacy
+> guard into it — including the corrected version that doesn't match the
+> comment. No Cloudflare secrets, no wrangler in CI. Keep `DEPLOYMENT.md` as
+> reference documentation, minus the account ID.
+
+So the deliverable is no longer a gated deployment pipeline. It is a CI workflow
+that decides whether a change is *fit* to release, plus documentation of how a
+release is performed by hand.
+
+What this changes against the brief above:
+
+- **`deploy.yml` is deleted, not rewritten.** That also removes the auto-deploy
+  on push to `main` that exists today, so merging stops being the same act as
+  shipping — the goal of the original brief, reached by deleting the automation
+  rather than by putting a reviewer in front of it.
+- **The `preview` job is gone from `ci.yml`**, with the Cloudflare secrets it
+  used. No workflow in this repository holds or needs a credential.
+- **`SETUP.md` is deleted.** Most of it was API token scope, GitHub secrets and
+  the `production` environment gate, none of which now exist. The parts that are
+  still true — branch protection and the required check name, and disabling the
+  analytics beacon — moved into `DEPLOYMENT.md` §9, and the manual release
+  procedure it implied is written out in §8.
+- **The account ID is out of `DEPLOYMENT.md`.** `wrangler whoami` reports it to
+  anyone who is already authenticated, which is everyone who could use it.

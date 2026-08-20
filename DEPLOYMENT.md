@@ -9,6 +9,10 @@ incorrectly (as a single self-contained HTML file served by a Worker script that
 did a www→apex redirect and stamped security headers). **None of that is true.**
 The corrections are noted inline.
 
+It is reference documentation, not a pipeline. **Releases are made by hand** —
+CI builds, tests and checks a change, and a person decides whether it ships. The
+procedure is §8. Nothing in this repository holds a Cloudflare credential.
+
 ---
 
 ## Summary
@@ -17,7 +21,7 @@ The corrections are noted inline.
 |---|---|
 | **Model** | Cloudflare **Worker with static assets** — *not* Pages |
 | **Worker/service name** | `mailviewer` |
-| **Account** | Patchable Account, `c6d27821afe97f0f202dc4752dd916f6` |
+| **Account** | Patchable Account (id deliberately not recorded here — `wrangler whoami`) |
 | **Worker script** | **None.** Assets-only; `main_module` is `null` |
 | **Custom domain** | `mailviewer.app` (apex) only — no `www` |
 | **Also public at** | `mailviewer.patchable-account.workers.dev` |
@@ -241,7 +245,7 @@ change. Flagged, not fixed.
 
 ### The previous CI privacy guard did not work
 
-The workflow this change set replaces had a step called *"Assert the privacy
+The workflow this change set deletes had a step called *"Assert the privacy
 policy is intact"*, whose job was to fail the deploy if `connect-src 'none'` were
 ever removed from the headers. It did this:
 
@@ -261,9 +265,10 @@ so the grep matches the **comment**, not the policy. Verified by deleting
 and re-running the original check: **it passed.**
 
 The guard would not have caught the one thing it existed to catch. The
-replacement in `ci.yml` and `deploy.yml` strips comment lines before matching,
-and was tested in both directions — it passes on the real file and fails on the
-tampered one.
+replacement lives in `ci.yml` and strips comment lines before matching, so it
+tests the policy rather than the prose describing it. It was checked in both
+directions against the tampered file above: the corrected guard refuses it, and
+the original guard passes it.
 
 Nothing was actually shipped with a broken CSP; the live headers are correct
 (§4). This was a latent hole in the safety net, not an incident.
@@ -349,7 +354,8 @@ Two independent reasons a check would miss it:
 
 1. **Plain `curl` does not trigger it.** Injection is keyed on the request
    looking like a browser. Every non-browser health check sees the clean
-   1116-byte body, so the checks in `deploy.yml` cannot catch this.
+   1116-byte body, so no curl-based check can catch this — one reason there is
+   no automated post-release health check here pretending otherwise.
 2. **`workers.dev` is not affected.** Injection is zone-level, and the
    `*.workers.dev` hostname is not in the zone:
 
@@ -416,7 +422,7 @@ version's asset set, producing a 404 and a blank page.
 Recommendation: **deploy at `@100`, not in stages.** Smoke-test on the
 per-version preview URL first — that gives a complete, self-consistent version
 to test against with no split-traffic hazard — then promote in one step. The
-`deploy.yml` workflow does exactly this.
+procedure in §8 does exactly this.
 
 If a gradual rollout is ever genuinely wanted, the prerequisite is making the
 build a single self-contained document (inline all JS/CSS), not tuning the
@@ -424,15 +430,122 @@ split percentage.
 
 ---
 
+## 8. Releasing
+
+Deploying is a manual act. CI decides whether a change is *fit* to release; a
+person decides whether it *is* released. There is no workflow, no token and no
+`production` environment gate in this repository, because there is no automated
+path to production for a gate to stand in front of.
+
+That is a deliberate trade. It costs a few minutes per release. It buys: no
+Cloudflare credential in GitHub to leak, mis-scope or rotate; no way for a merge
+to reach real users while nobody is looking; and — for an app whose entire claim
+is that it cannot send your mail anywhere — no machinery that could ship a
+broken CSP to production without a human having looked at the thing first.
+
+### Before you start
+
+You need `wrangler` authenticated against the account. `npx wrangler login` is
+the interactive path; `CLOUDFLARE_API_TOKEN` in your own shell works too. The
+token needs **Account → Workers Scripts → Edit** — *not* the Pages scope an
+earlier draft of this document specified, because `mailviewer` is a Worker with
+static assets and not a Pages project (§1). It needs no KV, R2, D1 or Queues
+permissions: this Worker has no bindings at all.
+
+### 1. Check CI is green on the commit you intend to ship
+
+Build, typecheck, tests, the external-origin tripwire and the CSP header checks
+all run in `ci.yml` on every PR and on `main`. Do not skip this and hand-verify:
+the header check in particular catches a class of mistake that is invisible by
+eye (§4).
+
+### 2. Build and upload a version that serves no traffic
+
+```bash
+git switch main && git pull
+npm ci
+npm run build
+npx wrangler versions upload --message "$(git rev-parse --short HEAD)"
+```
+
+`versions upload` is specifically the no-traffic half of a deploy: the version
+exists and gets its own preview URL, and the live deployment is untouched.
+
+Read the preview URL out of wrangler's output rather than constructing it — the
+version-prefix scheme is wrangler's to choose. Note the version id it prints;
+step 4 needs it.
+
+### 3. Smoke-test the preview
+
+Open the preview URL and actually use it: load a `.eml`, a `.msg` and a `.pst`;
+confirm the Network panel shows no third-party request; confirm the CSP
+self-test on the privacy page still reports the fetch as blocked; print a
+message to PDF and check the last page is there.
+
+> **A preview cannot tell you anything about the analytics beacon (§5a).**
+> Preview URLs live on `*.workers.dev`, which is outside the zone, so a preview
+> is clean whether or not the apex is injecting a beacon. Check that against
+> production, with a browser User-Agent, after the release.
+
+### 4. Promote it
+
+```bash
+npx wrangler versions deploy <version-id>@100 --name mailviewer --yes
+```
+
+**`@100`, not a percentage split.** The build is not self-contained —
+`index.html` points at content-hashed assets — so splitting traffic between two
+versions can hand a user the new HTML and the old asset set, which is a blank
+page. §7 has the detail.
+
+### 5. Confirm, with a browser User-Agent
+
+```bash
+UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+(KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+
+curl -sS -D- -o/dev/null -A "$UA" https://mailviewer.app/ | grep -i 'content-security-policy'
+curl -sS -A "$UA" https://mailviewer.app/ | grep -c cloudflareinsights   # want: 0
+```
+
+The User-Agent matters. A bare `curl` always looks clean, which is exactly how
+the beacon in §5a went unnoticed through a whole round of checking.
+
+If something is wrong, the rollback procedure is §3 — it is instant and does not
+rebuild anything.
+
+---
+
+## 9. Repository settings worth having
+
+Not required for any of the above to work, and not something this repository can
+configure for itself.
+
+**Branch protection on `main`** — Settings → Rules → Rulesets:
+
+- Require a pull request before merging
+- Require status checks to pass → **`Typecheck, test, build, privacy checks`**
+- Block force pushes
+
+That check name is the `name:` of the `verify` job in `ci.yml`. Rename the job
+and the required check silently stops matching, which blocks every merge on a
+check that can never report.
+
+**Disable the Cloudflare Web Analytics beacon** on the `mailviewer.app` zone —
+see §5a for what it is, why it is not a leak, and why it is still worth removing
+from a page that invites people to verify it in DevTools. It has regressed once
+already, so it is worth re-checking after any zone or DNS reconfiguration.
+
+---
+
 ## Appendix: what could not be determined
 
-- **Whether the two GitHub secrets already exist** (`CLOUDFLARE_API_TOKEN`,
-  `CLOUDFLARE_ACCOUNT_ID`) and what scopes the existing token has. Repository
-  secret values are not readable via the API by design, and the current token
-  was not exercised. The existing `deploy.yml` referenced both names, so they
-  are presumed to exist — but the *scope* of the existing token is unverified,
-  and it needs Workers scope rather than Pages scope. See `SETUP.md`.
-- **Whether `wrangler versions upload` prints a preview URL in the exact format
-  the workflow greps for.** The parsing is written defensively and warns rather
-  than failing, but it could not be confirmed, because running `versions upload`
-  would have mutated the account and this engagement was read-only.
+- **Whether `wrangler versions upload` prints a per-version preview URL in a
+  predictable format.** Never exercised: running it would have mutated the
+  account, and that engagement was read-only. §8 says to read the URL out of
+  wrangler's own output rather than construct it, because the version-prefix
+  scheme is wrangler's to choose and not something to hardcode.
+- **Whether any `CLOUDFLARE_*` repository secrets still exist.** Secret values
+  are not readable via the API by design. Nothing in this repository references
+  them any more, so any that remain are unused — worth deleting rather than
+  leaving a live credential around with nothing watching it.
