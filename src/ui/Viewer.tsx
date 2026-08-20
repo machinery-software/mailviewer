@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Folder, Message, ParseProgress, ParsedArchive } from "../lib/model";
+import type { Folder, Message, ParseProgress, ParsedArchive, SourceFormat } from "../lib/model";
 import { parseFile } from "../lib/parseClient";
 import { namespaceArchive } from "../lib/combine";
 import { takePendingFiles } from "../lib/pendingFiles";
 import { highlight } from "../lib/highlight";
 import MessageView from "./MessageView";
+import { ReportBlock } from "./ReportProblem";
+import { formatFromFilename } from "../lib/report";
+import PrintOut from "./PrintOut";
+import { type PrintScope, messagesToPrint } from "../lib/printing";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
   return [{ folder: f, depth }, ...f.children.flatMap((c) => flattenFolders(c, depth + 1))];
@@ -26,6 +30,11 @@ const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,messa
 interface FileError {
   name: string;
   message: string;
+  /**
+   * The format the extension implied. Kept alongside the error so the report
+   * link can say which parser was involved -- and nothing else about the file.
+   */
+  format?: SourceFormat;
 }
 
 export default function Viewer() {
@@ -39,6 +48,14 @@ export default function Viewer() {
   const [messageId, setMessageId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // What the next print job covers. Kept at "message" between jobs so that a
+  // browser-initiated print -- Cmd-P, File > Print -- has a prepared, measured
+  // document waiting for it rather than needing work done during beforeprint,
+  // which is too late to load anything.
+  const [printScope, setPrintScope] = useState<PrintScope>("message");
+  // A ref rather than state: nothing renders differently while a job is queued,
+  // and it must be readable from the readiness callback without re-subscribing.
+  const printPending = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const nextKey = useRef(0);
   const busy = useRef(false);
@@ -63,7 +80,11 @@ export default function Viewer() {
       } catch (err) {
         setErrors((prev) => [
           ...prev,
-          { name: file.name, message: err instanceof Error ? err.message : String(err) },
+          {
+            name: file.name,
+            message: err instanceof Error ? err.message : String(err),
+            format: formatFromFilename(file.name),
+          },
         ]);
       }
     }
@@ -146,6 +167,28 @@ export default function Viewer() {
 
   const pickFiles = () => inputRef.current?.click();
 
+  const requestPrint = useCallback((scope: PrintScope) => {
+    printPending.current = true;
+    setPrintScope(scope);
+  }, []);
+
+  // Fired once every message in the job has been measured. Printing before that
+  // would hand the browser frames of unknown height, which is the bug this is
+  // fixing.
+  const onPrintReady = useCallback(() => {
+    if (!printPending.current) return;
+    printPending.current = false;
+    window.print();
+  }, []);
+
+  // Drop back to the cheap single-message document once a job is done, so a
+  // hundred off-screen frames are not left rendered for the rest of the session.
+  useEffect(() => {
+    const reset = () => setPrintScope("message");
+    addEventListener("afterprint", reset);
+    return () => removeEventListener("afterprint", reset);
+  }, []);
+
   const hiddenInput = (
     <input
       ref={inputRef}
@@ -214,6 +257,18 @@ export default function Viewer() {
                 </li>
               ))}
             </ul>
+            {/*
+              Worded to fit both cases this callout covers: a file that broke a
+              parser, and a format we decline on purpose. In the second case the
+              file genuinely cannot be opened, so "this is our bug" would be
+              wrong -- but "if you think it should have opened" still invites the
+              report that matters.
+            */}
+            <p className="report-lead">
+              If you think this file should have opened — it reads fine in another mail client, or
+              it's a format we say we support — we'd like to know.
+            </p>
+            <ReportBlock compact context={{ failed: true, format: errors[0].format }} />
           </div>
         )}
       </section>
@@ -247,6 +302,14 @@ export default function Viewer() {
             </>
           )}
           {errors.map((e) => `${e.name} could not be opened.`).join(" ")}
+          {/*
+            The parsers are deliberately forgiving -- a damaged message is
+            skipped with a warning rather than sinking the file -- so this bar,
+            not the error callout, is what a user actually sees when something
+            has gone wrong. It is the more important of the two places to offer
+            the link.
+          */}{" "}
+          <a href="#/report">Report a problem</a>
         </div>
       )}
 
@@ -332,7 +395,12 @@ export default function Viewer() {
 
         <main className="pane">
           {selected ? (
-            <MessageView message={selected} query={query} />
+            <MessageView
+              message={selected}
+              query={query}
+              listedCount={visible.length}
+              onPrint={requestPrint}
+            />
           ) : (
             <div className="empty">Select a message.</div>
           )}
@@ -340,6 +408,12 @@ export default function Viewer() {
       </div>
 
       {dragOver && <div className="drop-hint">Drop to add more files</div>}
+
+      <PrintOut
+        messages={messagesToPrint(printScope, selected, visible)}
+        listedCount={visible.length}
+        onReady={onPrintReady}
+      />
     </div>
   );
 }

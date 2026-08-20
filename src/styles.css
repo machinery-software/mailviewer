@@ -919,3 +919,166 @@ pre.code .hl { color: var(--teal); }
   .hero, .section { padding-left: 16px; padding-right: 16px; }
   .step { grid-template-columns: 32px 1fr; gap: 12px; padding: 18px 14px; }
 }
+
+/* ---- Report a problem ---------------------------------------------------- */
+.report { margin-top: 26px; }
+.report-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* The warning about attaching mail files sits directly under the buttons, so it
+   is read before the link is used rather than after. */
+.report-warn {
+  margin: 14px 0 0;
+  color: var(--amber);
+  font-size: 13px;
+  max-width: 68ch;
+}
+.report-note { margin: 14px 0 0; color: var(--muted); font-size: 13px; max-width: 68ch; }
+.report-diag {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--slate-850);
+  color: var(--muted);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.report-lead { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.report-compact { margin-top: 14px; }
+.report-compact .report-warn { margin-top: 10px; }
+.warnbar a { color: inherit; }
+
+/* ---- Print --------------------------------------------------------------- */
+
+/* The print menu in the message tab row. A <details> rather than a scripted
+   popover: it opens on click and closes on Escape without any of that being
+   our code's problem. */
+.printmenu { position: relative; margin-left: auto; }
+.printmenu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  border-radius: 6px 6px 0 0;
+}
+.printmenu > summary::-webkit-details-marker { display: none; }
+.printmenu > summary::after { content: " ▾"; color: var(--dim); }
+.printmenu > summary:hover { color: var(--bone); background: var(--slate-800); }
+.printmenu[open] > summary { color: var(--bone); background: var(--slate-800); }
+.printmenu-pop {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  min-width: 232px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--slate-850);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.printmenu-pop button {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-family: inherit;
+}
+.printmenu-pop button:last-child { border-bottom: 0; }
+.printmenu-pop button:hover { background: var(--slate-800); color: var(--bone); }
+
+/*
+ * The printable document.
+ *
+ * Held off-screen rather than hidden. A frame inside `display: none` is not
+ * laid out, so it never loads and never has a height to measure -- and the
+ * whole fix depends on the frames being loaded and measured *before* the
+ * browser asks for pages, because nothing can be loaded during beforeprint.
+ */
+.printout {
+  position: absolute;
+  left: -200vw;
+  top: 0;
+}
+.printout iframe { width: 100%; border: 0; display: block; background: #fff; }
+
+@media print {
+  /* 12mm, matching PRINT_CONTENT_WIDTH_PX in src/lib/printing.ts. Change one
+     and change the other, or bodies get measured at a width they are not
+     printed at. */
+  @page { margin: 12mm; }
+
+  /*
+   * Everything below is scoped to pages that actually have a printable
+   * document. Printing the privacy or verify page should keep behaving exactly
+   * as it did -- these rules are about replacing the viewer's layout, and the
+   * viewer is the only place that layout exists.
+   */
+  body:has(.printout) { background: #fff !important; }
+
+  /* The viewer's own layout is a three-pane grid inside calc(100vh - 57px)
+     with scrolling panes, which is what clipped printing to a single page. It
+     is not adapted for paper; it is replaced for paper. */
+  body:has(.printout) .topbar,
+  .viewer-wrap > .warnbar,
+  .viewer,
+  .drop-hint { display: none !important; }
+
+  .printout {
+    position: static !important;
+    left: auto !important;
+    width: auto !important;
+    color: #16161a;
+  }
+  .printout-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #6a6a78;
+    border-bottom: 1px solid #d8d8e0;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+  }
+
+  /* Each message starts a new sheet, so a bundle can be split by message
+     without cutting one in half.
+
+     `break-inside: avoid` keeps a header block whole. There is deliberately no
+     `break-after: avoid` on it: a browser will not begin an iframe part-way
+     down a page, so pairing the two rules pushes header and body onto separate
+     sheets and leaves the first one empty. */
+  .printmsg { break-after: page; }
+  .printmsg:last-child { break-after: auto; }
+  .printmsg-head { break-inside: avoid; margin-bottom: 12px; }
+  .printmsg-head h2 {
+    font: 600 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0 0 8px;
+    color: #16161a;
+  }
+  .printmsg-head dl {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    gap: 1px 10px;
+    margin: 0;
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .printmsg-head dt { color: #6a6a78; }
+  .printmsg-head dd { margin: 0; color: #16161a; overflow-wrap: anywhere; }
+  .printmsg-body pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #16161a;
+    margin: 0;
+  }
+  .printmsg-empty { font-style: italic; color: #6a6a78; }
+}

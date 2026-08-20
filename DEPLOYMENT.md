@@ -298,6 +298,14 @@ This means **the stored artifact is verifiably the source in this repo at
 That is worth keeping true; it is the basis on which anyone can audit the
 privacy claim.
 
+> **Reproduce at the same commit.** The bundle now carries the commit it was
+> built from, substituted in by Vite at build time so that a bug report can name
+> an exact build (`src/config.ts`, `BUILD`). The build is still deterministic —
+> the same commit gives the same bytes — but a build from a *different* commit
+> will differ in the JS chunk, by design. Check out the commit that was
+> released before comparing hashes, and expect `wrangler versions list` to be
+> the thing that tells you which one that is.
+
 > ⚠️ **What a browser actually receives is not this.** The zone injects an extra
 > `<script>` tag into the HTML response for browser requests. The hashes above
 > describe the *stored* artifact, not the *delivered* page. See §5a.

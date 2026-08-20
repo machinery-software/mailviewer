@@ -208,7 +208,14 @@ export default function Verify() {
         </div>
       </section>
 
-      <Footer note="Found a way to make this page leak data? That's a security bug — please report it." />
+      <Footer
+        note={
+          <>
+            Found a way to make this page leak data? That's a security bug — please 
+            <a href="#/report">report it</a>.
+          </>
+        }
+      />
     </>
   );
 }
