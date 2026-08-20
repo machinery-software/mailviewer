@@ -14,6 +14,7 @@ export function Footer({ note }: { note?: ReactNode }) {
         <nav className="footer-links">
           <a href="#/privacy">Privacy</a>
           <a href="#/verify">Verify</a>
+          <a href="#/report">Report a problem</a>
           <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
             Source
           </a>

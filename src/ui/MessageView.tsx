@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Address, Attachment, Message } from "../lib/model";
 import { buildIframeDocument, sanitizeMessageHtml } from "../lib/sanitize";
 import { countMatches, highlight, highlightHtml } from "../lib/highlight";
+import { type PrintScope, listScopeLabel } from "../lib/printing";
 
 type Tab = "message" | "headers" | "source";
 
@@ -50,7 +51,24 @@ function AttachmentChip({ att }: { att: Attachment }) {
   );
 }
 
-export default function MessageView({ message, query = "" }: { message: Message; query?: string }) {
+export default function MessageView({
+  message,
+  query = "",
+  listedCount,
+  onPrint,
+  onPrintMenuToggle,
+  printReady,
+}: {
+  message: Message;
+  query?: string;
+  /** How many messages the current folder/search shows, for the print menu. */
+  listedCount: number;
+  onPrint: (scope: PrintScope) => void;
+  /** Opening the menu is what starts preparing the all-messages document. */
+  onPrintMenuToggle: (open: boolean) => void;
+  /** Which scopes have a built, measured document ready to print right now. */
+  printReady: Record<PrintScope, boolean>;
+}) {
   const [tab, setTab] = useState<Tab>("message");
 
   useEffect(() => setTab("message"), [message.id]);
@@ -147,6 +165,41 @@ export default function MessageView({ message, query = "" }: { message: Message;
               Raw source
             </button>
           )}
+
+          {/*
+            Printing offers an explicit choice rather than guessing. Someone
+            producing an exhibit needs to know exactly what is in it, and "print"
+            meaning "whatever happened to be on screen" is not good enough when
+            the artifact outlives the session that made it.
+
+            Opening the menu is what starts preparing the documents, so that
+            choosing an option can call window.print() with no awaited work in
+            between -- the print modal only opens against a live user gesture.
+            An option stays disabled until its document is measured, because the
+            alternative is printing frames of unknown height, which is the bug
+            two changes ago.
+          */}
+          <details
+            className="printmenu"
+            onToggle={(e) => onPrintMenuToggle(e.currentTarget.open)}
+          >
+            <summary title="Print or save as PDF">Print</summary>
+            <div className="printmenu-pop">
+              {(["message", "list"] as const).map((scope) => (
+                <button
+                  key={scope}
+                  disabled={!printReady[scope]}
+                  onClick={(e) => {
+                    e.currentTarget.closest("details")?.removeAttribute("open");
+                    onPrint(scope);
+                  }}
+                >
+                  {scope === "message" ? "This message" : listScopeLabel(listedCount)}
+                  {!printReady[scope] && <span className="printmenu-wait">Preparing…</span>}
+                </button>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
 

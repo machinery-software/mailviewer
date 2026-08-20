@@ -1,119 +1,153 @@
-# Engagement brief
+# mailviewer.app — print dialog deferred; user activation lost before print()
 
-Scoped task, two parts: establish ground truth about how `mailviewer.app` is
-deployed, then adapt the draft CI workflows to match it. Read-only on
-infrastructure throughout.
+Blocks the deploy. Found on `staging2-mailviewer.patchable-account.workers.dev`,
+the preview built from `fix/print-onscreen-leak-and-nonhtml` (PR #3).
 
-## Hard rules
+Production remains on `9b24838a-47b8-4516-84dd-92fc0f193eee` (commit `7d30a90`).
 
-- **Never deploy.** No `wrangler deploy`, `wrangler pages deploy`, or
-  `wrangler rollback`. No dashboard changes. There are real users on this site.
-  Read-only commands only.
-- **Never self-merge.** Output is a PR for David.
-- Treat the draft `ci.yml`, `deploy.yml` and `SETUP.md` as **unverified**,
-  written from an incorrect mental model of this repo. The same author had
-  previously described the project as a single self-contained HTML file served
-  by a Worker script — already established to be wrong. Verify every factual
-  claim against the repo and the Cloudflare account before keeping it. Delete or
-  rewrite anything that does not hold.
+**Never deploy. Never self-merge.** Output is a PR.
 
-## Part 1 — Ground truth
+## Symptom
 
-Determine, with evidence, how `mailviewer.app` is actually deployed, citing the
-command output behind each conclusion:
+The **Print ▾** control opens and both scope options render ("This message",
+"All N messages listed"). Clicking either does nothing at all — no system print
+dialog, no visible change, no error dialog. Observed in Safari.
 
-- Pages project or Worker with static assets? If Pages, Direct Upload or
-  Git-integrated? (Direct Upload cannot be converted without recreating the
-  project, and the apex domain is attached to the live one.)
-- The exact project name as Cloudflare knows it.
-- The ID and timestamp of the currently live deployment, and how many prior
-  deployments are retained. This is the rollback target; record it.
-- How the custom domain is attached — apex, www, both — and whether www
-  redirects or serves independently.
-- The actual headers served, compared against `public/_headers`. Flag drift.
-- Whether `dist/` from a clean `npm ci && npm run build` is byte-identical to
-  what is live. Record the hashes; this is the baseline.
-- The build command, output directory, and expected Node version.
+Crucially: **the dialog appears on the next interaction.** Click a scope option,
+nothing happens; click anything else on the page, and the print dialog opens.
+The call is not failing — it is being deferred.
 
-Anything that cannot be determined with the available credentials must be stated
-as unknown rather than inferred.
+Printing works for `.mbox` and fails this way for `.msg`. The `.msg` body renders
+correctly on screen; only printing is affected.
 
-## Part 2 — Adapt the CI drafts
+Reproduces in both Safari and Chrome. This is not a WebKit quirk — Chromium
+enforces transient user activation for `print()` on the same terms, which is
+exactly what the activation hypothesis below predicts. It also means you can
+reproduce and regression-test this in headless Chromium; real Safari is not
+required to verify the fix, though David will still check it by hand.
 
-Requirements the CI must satisfy regardless of deployment model:
+## Hypothesis — strong, but verify
 
-- Tests gate deploys — nothing reaches production without build, typecheck and
-  test suite passing.
-- A human approves production, via a GitHub Environment named `production` with
-  required reviewers, so merging to `main` is not the same act as shipping.
-  Document the dashboard steps; do not perform them.
-- PRs get a live preview URL, posted as a PR comment.
-- The rollback target is recorded in the run log of every production deploy,
-  before anything is overwritten.
-- Post-deploy health check against the real domain: HTTP 200 and security
-  headers still present.
-- Keep the no-external-origins check — grep built output for `http(s)://` and
-  fail on anything outside an allowlist. Run it against the current `dist/`
-  first, tune the allowlist to what legitimately appears, and report what it
-  flagged.
+The print dialog does eventually appear: clicking a scope option does nothing,
+and then the next click anywhere in the page brings up the print dialog. So
+`window.print()` is being called — it is being *deferred*.
 
-Adjust mechanics to the real model: Pages Direct Upload implies
-`wrangler pages deploy` and branch-alias previews; a Worker with static assets
-implies `wrangler versions upload` plus a separate `versions deploy`, with
-version IDs, per-version preview URLs and gradual rollout.
+That is the signature of losing **transient user activation**. WebKit only opens
+the print modal while a user gesture is still live (a few seconds). If the click
+handler performs async work first — constructing the off-screen print document,
+awaiting a frame `load` event, measuring content height — the activation can
+expire before `print()` runs, and Safari defers the modal until the next user
+interaction.
 
-Note whether the API token scope in `SETUP.md` is correct for the model found —
-the draft assumes Account → Cloudflare Pages → Edit.
+This explains the format split without any format-specific bug: `.msg` bodies
+require binary `PidTagBodyHtml` decoding and/or RTF conversion and are larger, so
+the prepare step overruns the activation window that `.mbox` completes inside.
+`.mbox` is not correct — it is merely fast enough. A large enough `.mbox` or
+`.pst` message should fail the same way. Treat this as one latent bug affecting
+all formats, not a `.msg` bug.
 
-## Deliverables
+Verify by measuring the elapsed time between the click handler starting and
+`print()` being called, per format. **Do not scope the fix to `.msg`.**
 
-- `DEPLOYMENT.md` — ground truth with evidence, current live deployment ID, and
-  the rollback procedure.
-- Corrected `.github/workflows/ci.yml` and `.github/workflows/deploy.yml`.
-- Corrected `SETUP.md` — exactly the manual steps David must perform: API token
-  creation and scope, the two GitHub secrets, the production environment and
-  reviewer, branch protection with required checks.
-- PR description covering what was found, what changed from the drafts and why,
-  and anything that could not be verified.
+## Fix direction
 
-Do not enable anything. The PR should be safe to sit unmerged indefinitely.
+**Do no async work between the user gesture and `window.print()`.**
+
+Prepare the print document when the menu *opens* — that is itself a user
+gesture, and it gives the frame time to load and be measured while the user is
+reading the options. Clicking a scope option then calls `print()` synchronously
+against an already-built document. Rebuild or invalidate when the selected
+message or scope changes.
+
+If any preparation must remain in the option-click path, it has to complete
+synchronously. Anything awaiting a `load` event does not qualify.
+
+Both PR #3 fixes must survive: the container stays invisible on screen at every
+width and zoom, and non-HTML and viewport-pinned bodies still paginate fully.
+
+Also keep both constraints from PR #3 satisfied at once: the print container must
+be invisible on screen at every viewport width and zoom level, **and** laid out
+enough that frames inside it load and can be measured. Do not trade one for the
+other.
+
+## Scope: every format, not just `.msg`
+
+Fix this for all supported message types. `.msg` is where it surfaced, not where
+it lives. The bug is in the shared path between the scope-option click and
+`window.print()`, and every format traverses it. `.mbox` passes only because its
+prepare step happens to finish inside the activation window — a large enough
+`.mbox` message should fail identically. Confirm that; it is the cheapest way to
+prove the diagnosis.
+
+A `.msg`-only fix or special case is not acceptable. It would leave the defect in
+place for every other format while appearing resolved.
+
+Formats to cover, per the parsers in this repo: `.eml`, `.emlx`, `.msg`, `.oft`,
+`.mbox`, `.pst`, `.ost`, `.olm`, `.mht`/`.mhtml`, and TNEF (`winmail.dat`). Body
+shapes that reach the renderer differently and must each be exercised: sanitized
+HTML, plain text, RTF-derived HTML (lzfu → rtf), `PidTagBodyHtml` stored as
+`PT_BINARY`, and viewport-pinned wrapper CSS (`height: 100vh`).
+
+Both print scopes — "This message" and "All N messages listed" — for each. The
+all-messages scope does proportionally more preparation work, so it is the most
+likely to exceed the activation window and the most important to measure. If
+preparation time scales with message count, say so explicitly in the PR and
+state where the ceiling is.
+
+## The test gap that let this through — fix this too
+
+The existing 23 print tests generate PDFs via Playwright's `page.pdf()`, which
+does not exercise the application's own print controls at all. Every one of them
+passed while the user-facing button was completely non-functional.
+
+This is the third time in this sequence that green tests measured something
+other than the thing users touch. Add tests that:
+
+- **Drive the actual UI control** — click Print ▾, click each scope option, and
+  assert the print flow is invoked (stub `window.print` and assert it was
+  called, with the expected scope). Do this per format: `.eml`, `.mbox`, and
+  `.msg` in each of its body shapes — and the rest of the formats listed under
+  Scope above. Asserting `print()` was called is **not sufficient** — it is
+  being called today, and the feature is still broken. The test must assert it
+  is called **while user activation is still valid**: synchronously within the
+  click handler's gesture, with no awaited work in between. Assert on elapsed
+  time between gesture and call, or on `navigator.userActivation.isActive` at
+  the moment of the call. A test that only checks "print was invoked" passes on
+  the current broken build.
+- **Assert the flow completes rather than hangs** — fail on timeout, so a
+  never-resolving promise is a test failure and not a silent pass.
+- **Assert the frames inside the print container actually load** (`load` event
+  fires, measured height is greater than a trivial placeholder).
+- **Keep the Bug 1 assertion from PR #3** — screenshot comparison with and
+  without the print document present.
+- **Keep the existing page-count and end-marker assertions** against real
+  generated PDFs.
+
+Run across all three engines. Note that headless WebKit has already passed once
+while real Safari failed, so David re-tests Safari by hand regardless.
+
+## Fixtures
+
+David has `.eml`, `.mbox` and `.msg` fixtures with unique end-marker strings.
+Fixtures do not exist yet for `.emlx`, `.oft`, `.pst`/`.ost`, `.olm`, `.mht` or
+TNEF — build them, since the scope above requires covering those paths too.
+Existing fixture markers (`END-OF-DOCUMENT-MARKER`, `MESSAGE-12-END`,
+`WIDE-TABLE-END-MARKER`, `INLINE-IMAGES-END-MARKER`, `MSG-WORD-END-MARKER`,
+`MSG-PLAIN-END-MARKER`, `MSG-HTML-END-MARKER`). Ask for them rather than
+rebuilding — the `.msg` set includes a Word-style body with `height: 100vh`
+wrapper CSS built specifically to exercise the measuring-frame collapse you
+diagnosed.
+
+## Constraints
+
+- Smallest diff. No refactoring beyond the fix.
+- Do not weaken the iframe sandbox or the CSP.
+- 267 unit tests stay green.
+- Nothing may introduce an external origin.
 
 ## Conventions
 
-- Work in a git worktree; keep this `PROMPT.md` in the worktree root.
-- Bisect-clean commits.
-- Dual validation: green CI and David's verification before merge.
-- After pushing the branch and opening the PR, remove the worktree.
-
----
-
-## Addendum, 2026-08-20 — scope changed after review
-
-David's decision on reviewing the above:
-
-> Split PR #1. Delete `deploy.yml` entirely — deploys stay manual via
-> `wrangler versions upload` / `versions deploy`. Keep `ci.yml`, triggered on
-> `pull_request` and push to `main`, and move the `connect-src 'none'` privacy
-> guard into it — including the corrected version that doesn't match the
-> comment. No Cloudflare secrets, no wrangler in CI. Keep `DEPLOYMENT.md` as
-> reference documentation, minus the account ID.
-
-So the deliverable is no longer a gated deployment pipeline. It is a CI workflow
-that decides whether a change is *fit* to release, plus documentation of how a
-release is performed by hand.
-
-What this changes against the brief above:
-
-- **`deploy.yml` is deleted, not rewritten.** That also removes the auto-deploy
-  on push to `main` that exists today, so merging stops being the same act as
-  shipping — the goal of the original brief, reached by deleting the automation
-  rather than by putting a reviewer in front of it.
-- **The `preview` job is gone from `ci.yml`**, with the Cloudflare secrets it
-  used. No workflow in this repository holds or needs a credential.
-- **`SETUP.md` is deleted.** Most of it was API token scope, GitHub secrets and
-  the `production` environment gate, none of which now exist. The parts that are
-  still true — branch protection and the required check name, and disabling the
-  analytics beacon — moved into `DEPLOYMENT.md` §9, and the manual release
-  procedure it implied is written out in §8.
-- **The account ID is out of `DEPLOYMENT.md`.** `wrangler whoami` reports it to
-  anyone who is already authenticated, which is everyone who could use it.
+- Git worktree; keep this `PROMPT.md` in the worktree root.
+- Bisect-clean commits, regression test in the same commit as the fix.
+- Dual validation: green CI and David's verification.
+- Remove the worktree after pushing.

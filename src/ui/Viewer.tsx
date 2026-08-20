@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Folder, Message, ParseProgress, ParsedArchive } from "../lib/model";
+import { flushSync } from "react-dom";
+import type { Folder, Message, ParseProgress, ParsedArchive, SourceFormat } from "../lib/model";
 import { parseFile } from "../lib/parseClient";
 import { namespaceArchive } from "../lib/combine";
 import { takePendingFiles } from "../lib/pendingFiles";
 import { highlight } from "../lib/highlight";
 import MessageView from "./MessageView";
+import { ReportBlock } from "./ReportProblem";
+import { formatFromFilename } from "../lib/report";
+import PrintOut from "./PrintOut";
+import { type PrintScope, messagesToPrint } from "../lib/printing";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
   return [{ folder: f, depth }, ...f.children.flatMap((c) => flattenFolders(c, depth + 1))];
@@ -26,6 +31,11 @@ const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,messa
 interface FileError {
   name: string;
   message: string;
+  /**
+   * The format the extension implied. Kept alongside the error so the report
+   * link can say which parser was involved -- and nothing else about the file.
+   */
+  format?: SourceFormat;
 }
 
 export default function Viewer() {
@@ -39,6 +49,16 @@ export default function Viewer() {
   const [messageId, setMessageId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // Which document a print job would produce right now. Kept at "message"
+  // between jobs so that a browser-initiated print -- Cmd-P, File > Print --
+  // has a prepared, measured document waiting for it rather than needing work
+  // done during beforeprint, which is too late to load anything.
+  const [printScope, setPrintScope] = useState<PrintScope>("message");
+  // The all-messages document is expensive -- one frame per message -- so it is
+  // only built while the print menu is open. Opening the menu is itself a user
+  // gesture, and it buys the time the user spends reading the two options.
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [printReady, setPrintReady] = useState({ message: false, list: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const nextKey = useRef(0);
   const busy = useRef(false);
@@ -63,7 +83,11 @@ export default function Viewer() {
       } catch (err) {
         setErrors((prev) => [
           ...prev,
-          { name: file.name, message: err instanceof Error ? err.message : String(err) },
+          {
+            name: file.name,
+            message: err instanceof Error ? err.message : String(err),
+            format: formatFromFilename(file.name),
+          },
         ]);
       }
     }
@@ -146,6 +170,47 @@ export default function Viewer() {
 
   const pickFiles = () => inputRef.current?.click();
 
+  /*
+    Print synchronously, inside the click that asked for it.
+
+    Everything printing needs -- building the document, loading the frames,
+    measuring them -- is done by now: the message document stands permanently
+    and the all-messages document was built when the menu opened. So this does
+    no asynchronous work at all, and `window.print()` runs while the user
+    gesture is still live. That matters: browsers only open the print modal
+    against transient user activation, and any awaited step in between hands
+    the activation back before the call.
+
+    flushSync because the class that decides *which* document prints has to be
+    on the element before the browser is asked for pages, and a normal state
+    update would not have been applied yet.
+  */
+  const requestPrint = useCallback((scope: PrintScope) => {
+    if (!printReady[scope]) return;
+    flushSync(() => setPrintScope(scope));
+    window.print();
+  }, [printReady]);
+
+  const onMessageReady = useCallback(
+    (ready: boolean) => setPrintReady((prev) => (prev.message === ready ? prev : { ...prev, message: ready })),
+    [],
+  );
+  const onListReady = useCallback(
+    (ready: boolean) => setPrintReady((prev) => (prev.list === ready ? prev : { ...prev, list: ready })),
+    [],
+  );
+
+  // Drop back to the cheap single-message document once a job is done, so a
+  // hundred off-screen frames are not left rendered for the rest of the session.
+  useEffect(() => {
+    const reset = () => {
+      setPrintScope("message");
+      setPrintMenuOpen(false);
+    };
+    addEventListener("afterprint", reset);
+    return () => removeEventListener("afterprint", reset);
+  }, []);
+
   const hiddenInput = (
     <input
       ref={inputRef}
@@ -214,6 +279,18 @@ export default function Viewer() {
                 </li>
               ))}
             </ul>
+            {/*
+              Worded to fit both cases this callout covers: a file that broke a
+              parser, and a format we decline on purpose. In the second case the
+              file genuinely cannot be opened, so "this is our bug" would be
+              wrong -- but "if you think it should have opened" still invites the
+              report that matters.
+            */}
+            <p className="report-lead">
+              If you think this file should have opened — it reads fine in another mail client, or
+              it's a format we say we support — we'd like to know.
+            </p>
+            <ReportBlock compact context={{ failed: true, format: errors[0].format }} />
           </div>
         )}
       </section>
@@ -247,6 +324,14 @@ export default function Viewer() {
             </>
           )}
           {errors.map((e) => `${e.name} could not be opened.`).join(" ")}
+          {/*
+            The parsers are deliberately forgiving -- a damaged message is
+            skipped with a warning rather than sinking the file -- so this bar,
+            not the error callout, is what a user actually sees when something
+            has gone wrong. It is the more important of the two places to offer
+            the link.
+          */}{" "}
+          <a href="#/report">Report a problem</a>
         </div>
       )}
 
@@ -332,7 +417,14 @@ export default function Viewer() {
 
         <main className="pane">
           {selected ? (
-            <MessageView message={selected} query={query} />
+            <MessageView
+              message={selected}
+              query={query}
+              listedCount={visible.length}
+              onPrint={requestPrint}
+              onPrintMenuToggle={setPrintMenuOpen}
+              printReady={printReady}
+            />
           ) : (
             <div className="empty">Select a message.</div>
           )}
@@ -340,6 +432,30 @@ export default function Viewer() {
       </div>
 
       {dragOver && <div className="drop-hint">Drop to add more files</div>}
+
+      {/*
+        Two documents, not one. The single-message document stands permanently
+        so that Cmd-P and "This message" both have something already measured to
+        print. The all-messages document is built only while the menu is open,
+        because it costs a frame per message.
+
+        Only one of them is `is-active`, and only the active one is printed --
+        which is decided synchronously at the moment of the click.
+      */}
+      <PrintOut
+        messages={messagesToPrint("message", selected, visible)}
+        listedCount={visible.length}
+        active={printScope === "message"}
+        onReadyChange={onMessageReady}
+      />
+      {(printMenuOpen || printScope === "list") && (
+        <PrintOut
+          messages={messagesToPrint("list", selected, visible)}
+          listedCount={visible.length}
+          active={printScope === "list"}
+          onReadyChange={onListReady}
+        />
+      )}
     </div>
   );
 }
