@@ -11,10 +11,13 @@ import {
   viewportSizedEml,
   wideTableEml,
 } from "./fixtures.mjs";
-import { msgHtml, msgPlainText, msgRtfEncapsulatedHtml, msgRtfText } from "./msgFixture.mjs";
+import { msgHtml, msgPlainText, msgRtfEncapsulatedHtml, msgRtfText, msgWordViewportBody } from "./msgFixture.mjs";
+import { emlHtml, emlPlain, emlx, mht, oft, winmailDat } from "./formatFixtures.mjs";
 import {
   WORK,
+  choosePrintScope,
   choosePrintList,
+  stubPrint,
   firefoxPdf,
   firefoxPrintPrefs,
   measuredHeights,
@@ -168,13 +171,13 @@ describe("printing everything currently listed", () => {
     const file = scratchFile("chain.mbox", threadMbox(12));
     const { page } = await pageFor(file);
     await choosePrintList(page);
-    await page.waitForFunction(() => window.__printCalls > 0, { timeout: 60000 });
+    await page.waitForFunction(() => window.__printCalls.length > 0, { timeout: 60000 });
 
     const state = await page.evaluate(() => ({
-      calls: window.__printCalls,
-      unmeasured: [...document.querySelectorAll(".printout iframe")]
+      calls: window.__printCalls.length,
+      unmeasured: [...document.querySelectorAll(".printout-shell.is-active iframe")]
         .filter((f) => !(parseInt(f.style.height, 10) > 0)).length,
-      frames: document.querySelectorAll(".printout iframe").length,
+      frames: document.querySelectorAll(".printout-shell.is-active iframe").length,
     }));
 
     expect(state.calls).toBe(1);
@@ -333,6 +336,138 @@ describe("bodies that size themselves against the viewport", () => {
       await page.close();
     }, 180000);
   }
+});
+
+/**
+ * Every supported format, driven through the control a user actually clicks.
+ *
+ * The suite this joins generated its PDFs with Playwright's `page.pdf()`, which
+ * never touches the application's own print controls -- so all of it passed
+ * while clicking Print did nothing at all. These tests click the real menu.
+ *
+ * Asserting that `window.print()` was called is not enough on its own: it was
+ * being called on the broken build too, just too late. The browser opens the
+ * print modal only against a live user gesture, so the assertion that matters
+ * is *when* the call lands -- synchronously inside the click, with no awaited
+ * work in between. A call that arrives even one task later is deferred by the
+ * browser to the next interaction, which is what users saw.
+ */
+const FORMAT_CASES = [
+  ["an .eml with an HTML body", "fmt.eml", () => emlHtml()],
+  ["an .eml with a plain-text body", "fmt-plain.eml", () => emlPlain()],
+  ["an .emlx", "fmt.emlx", () => Buffer.from(emlx())],
+  ["an .mht web archive", "fmt.mht", () => Buffer.from(mht())],
+  ["an .oft template", "fmt.oft", () => Buffer.from(oft())],
+  ["a bare TNEF winmail.dat", "winmail.dat", () => Buffer.from(winmailDat())],
+  ["an .mbox of twelve messages", "fmt.mbox", () => threadMbox(12)],
+  [".msg — PidTagBody plain text", "body.msg", () => Buffer.from(msgPlainText(30))],
+  [".msg — PidTagBodyHtml", "html.msg", () => Buffer.from(msgHtml(30))],
+  [".msg — genuine RTF", "rtf.msg", () => Buffer.from(msgRtfText(30))],
+  [".msg — HTML encapsulated in RTF", "rtfhtml.msg", () => Buffer.from(msgRtfEncapsulatedHtml(30))],
+  [".msg — Word body pinned to the viewport", "word.msg", () => Buffer.from(msgWordViewportBody(30))],
+];
+
+/**
+ * The gesture is spent the moment the handler awaits anything, so "fast enough"
+ * is not a performance budget -- it is the difference between a call made
+ * inside the gesture and one made after it. A synchronous call lands in single
+ * -digit milliseconds; anything that yields to the event loop first does not.
+ */
+const GESTURE_BUDGET_MS = 50;
+
+async function printThroughTheUI(page, origin, file, scope, expectFrames) {
+  await page.goto(`${origin}/#/open`);
+  await page.setInputFiles("input[type=file]", file);
+  await page.waitForSelector(".msgview", { timeout: 30000 });
+  await page.locator(".msgrow").first().click();
+  await waitForMeasured(page, expectFrames);
+  await stubPrint(page);
+  const label = await choosePrintScope(page, scope);
+  // No polling and no grace period: if the call is not already recorded by the
+  // time the click returns, it was not made inside the gesture.
+  const calls = await page.evaluate(() => window.__printCalls);
+  return { label, calls };
+}
+
+describe("the print control", () => {
+  for (const [label, filename, build] of FORMAT_CASES) {
+    for (const scope of ["message", "list"]) {
+      it(`prints ${label} — "${scope}" scope — inside the user gesture`, async () => {
+        const file = scratchFile(filename, build());
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+        const errors = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+
+        const { calls } = await printThroughTheUI(page, server.origin, file, scope, 0);
+
+        expect(errors).toEqual([]);
+        expect(calls, "clicking the scope option did not print at all").toHaveLength(1);
+        expect(
+          calls[0].duringGesture,
+          "print() landed in a later task than the click, so the browser defers the dialog " +
+            "to the next interaction instead of opening it",
+        ).toBe(true);
+        expect(calls[0].sinceGestureMs).toBeLessThan(GESTURE_BUDGET_MS);
+        // Chromium and Firefox expose this; WebKit does not, and reports null.
+        expect(calls[0].activationLive === false).toBe(false);
+
+        // The frames must genuinely have loaded, not merely have been created.
+        const heights = await measuredHeights(page);
+        for (const height of heights) expect(height).toBeGreaterThan(200);
+
+        await page.close();
+      }, 180000);
+    }
+  }
+});
+
+describe("the print control on every engine", () => {
+  // Headless WebKit has passed before while real Safari failed, so this is
+  // necessary rather than sufficient -- but the timing property it checks is
+  // the one that differs between engines, so it is worth checking on each.
+  for (const [name, type] of [["firefox", firefox], ["webkit", webkit]]) {
+    it(`prints inside the gesture in ${name}`, async () => {
+      const engine = await type.launch();
+      try {
+        const page = await engine.newPage({ viewport: { width: 1280, height: 800 } });
+        const file = scratchFile("engine.msg", Buffer.from(msgHtml(30)));
+        for (const scope of ["message", "list"]) {
+          const { calls } = await printThroughTheUI(page, server.origin, file, scope, 0);
+          expect(calls, `${name}/${scope}: no print call`).toHaveLength(1);
+          expect(calls[0].duringGesture, `${name}/${scope}: print deferred past the gesture`).toBe(true);
+          expect(calls[0].sinceGestureMs).toBeLessThan(GESTURE_BUDGET_MS);
+        }
+      } finally {
+        await engine.close();
+      }
+    }, 180000);
+  }
+});
+
+describe("what each scope actually prints", () => {
+  it("prints one message for \"this message\" and the whole list for the other", async () => {
+    const file = scratchFile("scopes.mbox", threadMbox(12));
+
+    const one = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await printThroughTheUI(one, server.origin, file, "message", 1);
+    const singlePdf = await pdfFromChromium(one, "scope-message.pdf");
+    // The list is newest-first, so the selected message is number 12. Check a
+    // middle sentinel for absence: "SENTINEL-CHAIN-1" is a prefix of
+    // "SENTINEL-CHAIN-12" and would match the message that is legitimately there.
+    expect(containsText(singlePdf, "SENTINEL-CHAIN-12")).toBe(true);
+    expect(containsText(singlePdf, "SENTINEL-CHAIN-5")).toBe(false);
+    expect(containsText(singlePdf, "SENTINEL-CHAIN-11")).toBe(false);
+    await one.close();
+
+    const all = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const { label } = await printThroughTheUI(all, server.origin, file, "list", 1);
+    expect(label).toBe("All 12 messages listed");
+    const listPdf = await pdfFromChromium(all, "scope-list.pdf");
+    for (let i = 1; i <= 12; i++) {
+      expect(containsText(listPdf, `SENTINEL-CHAIN-${i}`), `message ${i} missing`).toBe(true);
+    }
+    await all.close();
+  }, 180000);
 });
 
 describe("other engines", () => {

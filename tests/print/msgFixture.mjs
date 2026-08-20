@@ -90,3 +90,27 @@ export function msgRtfEncapsulatedHtml(paragraphs = 40, marker = "MSG-RTF-HTML-E
     `{\\*\\htmltag64 <p>}${marker}{\\*\\htmltag64 </p></body></html>}\n}`;
   return buildCfb([...baseNodes("Encapsulated-HTML .msg"), binProp(PID.RtfCompressed, melaRtf(rtf))]);
 }
+
+/**
+ * A Word-authored .msg whose body is wrapped in viewport-pinned CSS.
+ *
+ * This is the shape that collapsed the measuring frame: `height: 100vh` means
+ * whatever the frame is tall, and the frame used to be 10px. Kept as a print
+ * fixture so that regression is caught through the real control as well as
+ * through the measurement unit.
+ */
+export function msgWordViewportBody(paragraphs = 30, marker = "MSG-WORD-END-MARKER") {
+  const body = Array.from({ length: paragraphs }, (_, i) =>
+    `<p class=MsoNormal>Paragraph ${i + 1}. The surveyor confirmed that no temporary repairs ` +
+    `had been undertaken prior to inspection.<o:p></o:p></p>`,
+  ).join("\n");
+
+  const html =
+    `<style><!--\n` +
+    `p.MsoNormal{margin:0cm;font-size:11.0pt;font-family:"Calibri",sans-serif;}\n` +
+    `@page WordSection1{size:612.0pt 792.0pt;margin:72.0pt;}\n` +
+    `div.WordSection1{page:WordSection1;}\n--></style>` +
+    `<div class=WordSection1 style="height:100vh;overflow:auto">${body}<p>${marker}</p></div>`;
+
+  return buildCfb([...baseNodes("Word-authored .msg"), strProp(PID.BodyHtml, html)]);
+}

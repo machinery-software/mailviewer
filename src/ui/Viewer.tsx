@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { Folder, Message, ParseProgress, ParsedArchive, SourceFormat } from "../lib/model";
 import { parseFile } from "../lib/parseClient";
 import { namespaceArchive } from "../lib/combine";
@@ -48,14 +49,16 @@ export default function Viewer() {
   const [messageId, setMessageId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  // What the next print job covers. Kept at "message" between jobs so that a
-  // browser-initiated print -- Cmd-P, File > Print -- has a prepared, measured
-  // document waiting for it rather than needing work done during beforeprint,
-  // which is too late to load anything.
+  // Which document a print job would produce right now. Kept at "message"
+  // between jobs so that a browser-initiated print -- Cmd-P, File > Print --
+  // has a prepared, measured document waiting for it rather than needing work
+  // done during beforeprint, which is too late to load anything.
   const [printScope, setPrintScope] = useState<PrintScope>("message");
-  // A ref rather than state: nothing renders differently while a job is queued,
-  // and it must be readable from the readiness callback without re-subscribing.
-  const printPending = useRef(false);
+  // The all-messages document is expensive -- one frame per message -- so it is
+  // only built while the print menu is open. Opening the menu is itself a user
+  // gesture, and it buys the time the user spends reading the two options.
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [printReady, setPrintReady] = useState({ message: false, list: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const nextKey = useRef(0);
   const busy = useRef(false);
@@ -167,24 +170,43 @@ export default function Viewer() {
 
   const pickFiles = () => inputRef.current?.click();
 
-  const requestPrint = useCallback((scope: PrintScope) => {
-    printPending.current = true;
-    setPrintScope(scope);
-  }, []);
+  /*
+    Print synchronously, inside the click that asked for it.
 
-  // Fired once every message in the job has been measured. Printing before that
-  // would hand the browser frames of unknown height, which is the bug this is
-  // fixing.
-  const onPrintReady = useCallback(() => {
-    if (!printPending.current) return;
-    printPending.current = false;
+    Everything printing needs -- building the document, loading the frames,
+    measuring them -- is done by now: the message document stands permanently
+    and the all-messages document was built when the menu opened. So this does
+    no asynchronous work at all, and `window.print()` runs while the user
+    gesture is still live. That matters: browsers only open the print modal
+    against transient user activation, and any awaited step in between hands
+    the activation back before the call.
+
+    flushSync because the class that decides *which* document prints has to be
+    on the element before the browser is asked for pages, and a normal state
+    update would not have been applied yet.
+  */
+  const requestPrint = useCallback((scope: PrintScope) => {
+    if (!printReady[scope]) return;
+    flushSync(() => setPrintScope(scope));
     window.print();
-  }, []);
+  }, [printReady]);
+
+  const onMessageReady = useCallback(
+    (ready: boolean) => setPrintReady((prev) => (prev.message === ready ? prev : { ...prev, message: ready })),
+    [],
+  );
+  const onListReady = useCallback(
+    (ready: boolean) => setPrintReady((prev) => (prev.list === ready ? prev : { ...prev, list: ready })),
+    [],
+  );
 
   // Drop back to the cheap single-message document once a job is done, so a
   // hundred off-screen frames are not left rendered for the rest of the session.
   useEffect(() => {
-    const reset = () => setPrintScope("message");
+    const reset = () => {
+      setPrintScope("message");
+      setPrintMenuOpen(false);
+    };
     addEventListener("afterprint", reset);
     return () => removeEventListener("afterprint", reset);
   }, []);
@@ -400,6 +422,8 @@ export default function Viewer() {
               query={query}
               listedCount={visible.length}
               onPrint={requestPrint}
+              onPrintMenuToggle={setPrintMenuOpen}
+              printReady={printReady}
             />
           ) : (
             <div className="empty">Select a message.</div>
@@ -409,11 +433,29 @@ export default function Viewer() {
 
       {dragOver && <div className="drop-hint">Drop to add more files</div>}
 
+      {/*
+        Two documents, not one. The single-message document stands permanently
+        so that Cmd-P and "This message" both have something already measured to
+        print. The all-messages document is built only while the menu is open,
+        because it costs a frame per message.
+
+        Only one of them is `is-active`, and only the active one is printed --
+        which is decided synchronously at the moment of the click.
+      */}
       <PrintOut
-        messages={messagesToPrint(printScope, selected, visible)}
+        messages={messagesToPrint("message", selected, visible)}
         listedCount={visible.length}
-        onReady={onPrintReady}
+        active={printScope === "message"}
+        onReadyChange={onMessageReady}
       />
+      {(printMenuOpen || printScope === "list") && (
+        <PrintOut
+          messages={messagesToPrint("list", selected, visible)}
+          listedCount={visible.length}
+          active={printScope === "list"}
+          onReadyChange={onListReady}
+        />
+      )}
     </div>
   );
 }

@@ -56,12 +56,18 @@ export default function MessageView({
   query = "",
   listedCount,
   onPrint,
+  onPrintMenuToggle,
+  printReady,
 }: {
   message: Message;
   query?: string;
   /** How many messages the current folder/search shows, for the print menu. */
   listedCount: number;
   onPrint: (scope: PrintScope) => void;
+  /** Opening the menu is what starts preparing the all-messages document. */
+  onPrintMenuToggle: (open: boolean) => void;
+  /** Which scopes have a built, measured document ready to print right now. */
+  printReady: Record<PrintScope, boolean>;
 }) {
   const [tab, setTab] = useState<Tab>("message");
 
@@ -165,26 +171,33 @@ export default function MessageView({
             producing an exhibit needs to know exactly what is in it, and "print"
             meaning "whatever happened to be on screen" is not good enough when
             the artifact outlives the session that made it.
+
+            Opening the menu is what starts preparing the documents, so that
+            choosing an option can call window.print() with no awaited work in
+            between -- the print modal only opens against a live user gesture.
+            An option stays disabled until its document is measured, because the
+            alternative is printing frames of unknown height, which is the bug
+            two changes ago.
           */}
-          <details className="printmenu">
+          <details
+            className="printmenu"
+            onToggle={(e) => onPrintMenuToggle(e.currentTarget.open)}
+          >
             <summary title="Print or save as PDF">Print</summary>
             <div className="printmenu-pop">
-              <button
-                onClick={(e) => {
-                  e.currentTarget.closest("details")?.removeAttribute("open");
-                  onPrint("message");
-                }}
-              >
-                This message
-              </button>
-              <button
-                onClick={(e) => {
-                  e.currentTarget.closest("details")?.removeAttribute("open");
-                  onPrint("list");
-                }}
-              >
-                {listScopeLabel(listedCount)}
-              </button>
+              {(["message", "list"] as const).map((scope) => (
+                <button
+                  key={scope}
+                  disabled={!printReady[scope]}
+                  onClick={(e) => {
+                    e.currentTarget.closest("details")?.removeAttribute("open");
+                    onPrint(scope);
+                  }}
+                >
+                  {scope === "message" ? "This message" : listScopeLabel(listedCount)}
+                  {!printReady[scope] && <span className="printmenu-wait">Preparing…</span>}
+                </button>
+              ))}
             </div>
           </details>
         </div>

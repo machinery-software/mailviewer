@@ -1053,7 +1053,11 @@ pre.code .hl { color: var(--teal); }
   .viewer,
   .drop-hint { display: none !important; }
 
-  .printout-shell {
+  /* Both documents are in the page while the menu is open. Exactly one of them
+     is the job that was asked for. */
+  .printout-shell:not(.is-active) { display: none !important; }
+
+  .printout-shell.is-active {
     position: static !important;
     width: auto !important;
     height: auto !important;
@@ -1105,3 +1109,8 @@ pre.code .hl { color: var(--teal); }
   }
   .printmsg-empty { font-style: italic; color: #6a6a78; }
 }
+
+/* An option whose document is not measured yet cannot be printed synchronously,
+   and printing it asynchronously is what broke the control. Say so instead. */
+.printmenu-pop button:disabled { cursor: default; color: var(--dim); }
+.printmenu-wait { float: right; font-size: 11px; color: var(--dim); }
