@@ -451,6 +451,38 @@ to reach real users while nobody is looking; and — for an app whose entire cla
 is that it cannot send your mail anywhere — no machinery that could ship a
 broken CSP to production without a human having looked at the thing first.
 
+A release is two commands with a person between them:
+
+```bash
+npm run release:preview                            # unit tests → build → print tests → upload, no traffic
+                                                   # then verify the preview yourself (step 3)
+npm run release:promote -- <version-id>@100 --yes  # send production traffic to it
+```
+
+Nothing reaches Cloudflare unless both test suites pass, and nothing reaches
+users unless someone runs the second command after looking at the first one's
+result. `npm run deploy` refuses and prints this procedure. It used to be
+`npm run build && wrangler deploy`: one step, straight to the apex, with no
+tests and no preview.
+
+### Current production and rollback
+
+| | |
+|---|---|
+| **Production version** | `a7ce8d93-1f6a-4398-a0a9-302127bcfdd4` |
+| **Rollback target** | `9b24838a-47b8-4516-84dd-92fc0f193eee` |
+
+Rolling back is the promote command pointed at the older version. It is instant
+and rebuilds nothing:
+
+```bash
+npm run release:promote -- 9b24838a-47b8-4516-84dd-92fc0f193eee@100 --yes
+```
+
+Then run the checks in step 5. When a release is promoted, the version it
+replaced becomes the rollback target — update both rows. (§3 is the July audit
+snapshot; this table is the current state.)
+
 ### Before you start
 
 You need `wrangler` authenticated against the account. `npx wrangler login` is
@@ -460,6 +492,10 @@ earlier draft of this document specified, because `mailviewer` is a Worker with
 static assets and not a Pages project (§1). It needs no KV, R2, D1 or Queues
 permissions: this Worker has no bindings at all.
 
+`release:preview` runs the print suite, which drives Chromium, Firefox and
+WebKit through Playwright. If those browsers are not installed yet, run
+`npx playwright install` once.
+
 ### 1. Check CI is green on the commit you intend to ship
 
 Build, typecheck, tests, the external-origin tripwire and the CSP header checks
@@ -467,39 +503,65 @@ all run in `ci.yml` on every PR and on `main`. Do not skip this and hand-verify:
 the header check in particular catches a class of mistake that is invisible by
 eye (§4).
 
-### 2. Build and upload a version that serves no traffic
+CI does **not** run the print suite (MAC-596). `release:preview` runs it
+locally, which is one reason it has to be the way a release is made.
+
+### 2. Test and upload a version that serves no traffic
 
 ```bash
 git switch main && git pull
 npm ci
-npm run build
-npx wrangler versions upload --message "$(git rev-parse --short HEAD)"
+git status --short        # want: no output -- what gets uploaded is what is on disk
+npm run release:preview
 ```
 
-`versions upload` is specifically the no-traffic half of a deploy: the version
-exists and gets its own preview URL, and the live deployment is untouched.
+That runs three steps and stops at the first failure, before anything reaches
+Cloudflare:
 
-Read the preview URL out of wrangler's output rather than constructing it — the
-version-prefix scheme is wrangler's to choose. Note the version id it prints;
-step 4 needs it.
+1. **`npm test`** — the unit suite.
+2. **`npm run test:print`** — builds `dist/`, then runs the print and rendering
+   suite against that build in Chromium, Firefox and WebKit. The build is part
+   of the script so the suite cannot report on a stale bundle, which it once
+   did: run after a pull, 30 of 81 tests failed with values from before a fix
+   that was already merged.
+3. **`wrangler versions upload --preview-alias staging`**, with the short commit
+   as the version message — the no-traffic half of a deploy. The version
+   exists and gets a preview URL; the live deployment is untouched.
 
-### 3. Smoke-test the preview
+There is no second build: what is uploaded is the `dist/` the print tests just
+ran against.
+
+The `staging` alias is fixed, so the preview is at the same address every
+release rather than `staging2`, `staging3`, …; each upload moves the alias to
+the new version. Read the URL out of wrangler's output rather than constructing
+it, and note the **version ID** it prints — step 4 needs it.
+
+### 3. Verify the preview — this is the gate
+
+Everything before this was a machine deciding the build is fit to release. This
+step is a person deciding it is released, and nothing is promoted until it is
+done.
 
 Open the preview URL and actually use it: load a `.eml`, a `.msg` and a `.pst`;
 confirm the Network panel shows no third-party request; confirm the CSP
 self-test on the privacy page still reports the fetch as blocked; print a
 message to PDF and check the last page is there.
 
-> **A preview cannot tell you anything about the analytics beacon (§5a).**
-> Preview URLs live on `*.workers.dev`, which is outside the zone, so a preview
-> is clean whether or not the apex is injecting a beacon. Check that against
-> production, with a browser User-Agent, after the release.
+> **A preview cannot reveal zone-level problems, such as the analytics beacon
+> (§5a, MAC-515).** Preview URLs live on `*.workers.dev`, which is outside the
+> `mailviewer.app` zone, so a preview is clean whether or not the apex is
+> injecting a beacon. That check only works against the apex, with a browser
+> User-Agent — step 5, after promoting.
 
 ### 4. Promote it
 
 ```bash
-npx wrangler versions deploy <version-id>@100 --name mailviewer --yes
+npm run release:promote -- <version-id>@100 --yes
 ```
+
+`release:promote` is `wrangler versions deploy`; everything after `--` is passed
+to it. Run bare, wrangler asks interactively which version to deploy and at what
+percentage — choose the version from step 2, at 100%.
 
 **`@100`, not a percentage split.** The build is not self-contained —
 `index.html` points at content-hashed assets — so splitting traffic between two
@@ -519,8 +581,8 @@ curl -sS -A "$UA" https://mailviewer.app/ | grep -c cloudflareinsights   # want:
 The User-Agent matters. A bare `curl` always looks clean, which is exactly how
 the beacon in §5a went unnoticed through a whole round of checking.
 
-If something is wrong, the rollback procedure is §3 — it is instant and does not
-rebuild anything.
+If something is wrong, roll back with the command under *Current production and
+rollback* above — it is instant and does not rebuild anything.
 
 ---
 

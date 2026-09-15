@@ -57,17 +57,19 @@ production breaks locally first.
 Static assets on Workers are free, with no Worker invocations billed because
 there is no Worker.
 
+Releases are made by hand, in two gated steps:
+
 ```bash
 npx wrangler login
-npm run deploy
+npm run release:preview                            # tests, build, print tests, then upload a version serving no traffic
+npm run release:promote -- <version-id>@100 --yes  # only after checking that version's preview
 ```
 
-Or push to `main` — `.github/workflows/deploy.yml` builds, runs the tests, and
-**refuses to deploy if `connect-src 'none'` has gone missing from the built
-headers**. Set two repository secrets first:
-
-- `CLOUDFLARE_API_TOKEN` — an API token with the *Edit Cloudflare Workers* template
-- `CLOUDFLARE_ACCOUNT_ID`
+Nothing reaches Cloudflare unless the unit and print suites pass, and nothing
+reaches users until a person has looked at the preview. `npm run deploy`
+deliberately refuses. There is no deploy workflow, and the repository holds no
+Cloudflare credentials. The full procedure — what to check on the preview, and
+how to roll back — is [DEPLOYMENT.md §8](DEPLOYMENT.md#8-releasing).
 
 ## Layout
 

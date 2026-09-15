@@ -3,9 +3,11 @@ import { defineConfig } from "vitest/config";
 /**
  * The print tests drive real browsers and produce real PDFs, so they are kept
  * out of `npm test`: that suite is pure and fast and runs on every push, and
- * these need `npm run build` plus a Playwright browser download first.
+ * these need a Playwright browser download and a built `dist/`.
  *
- * Run them with `npm run test:print`.
+ * Run them with `npm run test:print`, which builds `dist/` first. Running this
+ * config directly tests whatever `dist/` happens to hold, which after a pull is
+ * the previous bundle.
  */
 export default defineConfig({
   test: {
