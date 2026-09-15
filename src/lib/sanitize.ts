@@ -155,12 +155,21 @@ export function sanitizeMessageHtml(
   return { html: clean, blockedRemote };
 }
 
-/** Wrap sanitized body HTML in a self-contained document for the srcdoc iframe. */
-export function buildIframeDocument(bodyHtml: string, darkMode: boolean): string {
-  const fg = darkMode ? "#e8e8ea" : "#16161a";
-  const bg = darkMode ? "#141417" : "#ffffff";
-  const link = darkMode ? "#7aa2ff" : "#2a5bd7";
-
+/**
+ * Wrap sanitized body HTML in a self-contained document for the srcdoc iframe.
+ *
+ * The body renders on a light canvas always -- on screen and on paper, whatever
+ * the app's own theme and whatever the OS prefers -- because that is the canvas
+ * its sender composed against: mail clients render HTML mail on white. This
+ * used to take a dark-mode flag, the viewer passed `true`, and mail declaring
+ * dark text and no background of its own was painted onto #141417.
+ *
+ * Nothing here adjusts a colour the message declares. Every colour below sits
+ * inside :where(), which has no specificity, so any rule the message carries --
+ * even a bare `*` -- wins over it. A message shown in colours its sender did
+ * not choose is a different document, and this tool produces exhibits.
+ */
+export function buildIframeDocument(bodyHtml: string): string {
   // A restrictive CSP *inside* the frame as well. The frame already inherits the
   // parent's policy; this is a second, independent statement of the same rule,
   // so that a future change to the parent policy can't silently widen the frame.
@@ -171,24 +180,26 @@ export function buildIframeDocument(bodyHtml: string, darkMode: boolean): string
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; font-src data:; connect-src 'none'; script-src 'none'; form-action 'none'; base-uri 'none'">
 <style>
-  html,body{margin:0;padding:16px;background:${bg};color:${fg};
+  :where(html){color-scheme:light;background:#ffffff;color:#16161a;}
+  html,body{margin:0;padding:16px;
     font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     word-break:break-word;overflow-wrap:anywhere;}
-  a{color:${link};}
+  :where(a){color:#2a5bd7;}
   img,video{max-width:100%;height:auto;}
   /* An image we refused to fetch should look refused, not merely broken --
      otherwise the reader thinks the app is buggy rather than protecting them. */
   img[data-blocked-src]{
-    border:1px dashed ${darkMode ? "#3a4a5a" : "#c4ccd6"};
+    border:1px dashed #c4ccd6;
     border-radius:4px;
-    background:${darkMode ? "#1a2029" : "#f4f6f9"};
+    background:#f4f6f9;
     min-width:32px;min-height:32px;
-    color:${darkMode ? "#7a8798" : "#8a94a2"};
+    color:#8a94a2;
     font:12px/1.4 ui-monospace,monospace;
     padding:6px;
   }
   table{max-width:100%;}
-  blockquote{margin:0 0 0 12px;padding-left:12px;border-left:2px solid ${darkMode ? "#3a3a42" : "#dcdce4"};color:${darkMode ? "#a0a0aa" : "#5a5a68"};}
+  blockquote{margin:0 0 0 12px;padding-left:12px;}
+  :where(blockquote){border-left:2px solid #dcdce4;color:#5a5a68;}
   pre{white-space:pre-wrap;}
   /* Search-match highlight injected by highlightHtml(). */
   mark.mvh{background:#ffb020;color:#1a1204;border-radius:2px;padding:0 1px;}

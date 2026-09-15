@@ -23,6 +23,44 @@ function htmlPart(html) {
 }
 
 /**
+ * Text colours a sender declared: the navy and purple from Word's own colour
+ * picker, and one pale colour chosen *because* it reads poorly on white. A
+ * renderer that "corrects" low-contrast text would change that one first, so
+ * it is what shows the body was rendered as sent rather than improved.
+ */
+export const SENDER_COLOURS = { navy: "#1F3864", purple: "#7030A0", pale: "#C9A0DC" };
+
+/** Large, bold, and one colour per line, so each colour paints solid glyph cores. */
+export const COLOURED_LINE_STYLE = "margin:0;font:bold 32px/44px Arial,sans-serif";
+
+export const colouredLines = () => [
+  [SENDER_COLOURS.navy, "Navy body text"],
+  [SENDER_COLOURS.purple, "Purple body text"],
+  [SENDER_COLOURS.pale, "Pale body text"],
+];
+
+/**
+ * The shape that made bodies unreadable: text colours declared, no background
+ * declared anywhere, so the sender was relying on the white canvas every mail
+ * client gives HTML mail. Colours are inline, the way Outlook writes them.
+ */
+export function colouredTextEml(marker = "COLOURED-TEXT-END-MARKER") {
+  const lines = colouredLines()
+    .map(([colour, text]) =>
+      `<p class=MsoNormal style="${COLOURED_LINE_STYLE}"><span style="color:${colour}">${text}</span></p>`)
+    .join("\n");
+  return [
+    ...headers({
+      subject: "Coloured text without a background",
+      from: "Adjuster <adjuster@fixture.invalid>",
+      to: "Counsel <counsel@fixture.invalid>",
+      date: "Tue, 3 Jun 2025 09:14:00 -0400",
+    }),
+    htmlPart(`<div class=WordSection1>${lines}<p class=MsoNormal>${marker}</p></div>`),
+  ].join("\r\n");
+}
+
+/**
  * A single message whose body is long enough to span many printed pages.
  * `paragraphs` controls the length; each one is a full paragraph of prose.
  */

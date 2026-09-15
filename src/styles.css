@@ -829,7 +829,17 @@ pre.code .hl { color: var(--teal); }
 }
 
 .msgbody { flex: 1; min-height: 0; overflow: auto; }
-.msgbody iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+.msgbody iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; color-scheme: light; }
+
+/*
+ * A message body is the sender's document and renders on the light canvas it
+ * was written for, whatever the app's own theme. buildIframeDocument() does
+ * this inside the frame; this covers the bodies that never reach one -- plain
+ * text, and RTF that carried no HTML. The text colour is the printed <pre>'s,
+ * so screen and paper agree.
+ */
+.msgbody-canvas { background: #fff; color-scheme: light; }
+.msgbody-canvas .plaintext { color: #16161a; }
 
 .plaintext {
   margin: 0;
@@ -1019,7 +1029,7 @@ pre.code .hl { color: var(--teal); }
   height: 0;
   overflow: hidden;
 }
-.printout iframe { width: 100%; border: 0; display: block; background: #fff; }
+.printout iframe { width: 100%; border: 0; display: block; background: #fff; color-scheme: light; }
 
 /* Applies on screen as well as on paper. The off-screen copy and the printed
    copy should lay out identically -- the off-screen one is what gets measured,

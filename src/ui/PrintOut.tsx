@@ -27,10 +27,9 @@ function PrintMessage({ message, onMeasured }: {
   const srcDoc = useMemo(() => {
     if (!message.html) return null;
     const { html } = sanitizeMessageHtml(message.html, message.attachments);
-    // Light mode: this is going on paper, and the on-screen dark theme would
-    // print as a solid black rectangle or, with backgrounds off, as pale grey
-    // text on white.
-    return buildIframeDocument(html, false);
+    // The same document the viewer shows. Screen and paper come from one
+    // builder with no theme argument, so they cannot render different colours.
+    return buildIframeDocument(html);
   }, [message]);
 
   const [height, setHeight] = useState<number | null>(null);
