@@ -1,114 +1,94 @@
-# mailviewer.app — email bodies unreadable on dark backgrounds (MAC-594)
+# mailviewer.app — replace the deploy script with a gated release flow
 
-User-reported. Emails carrying their own CSS render poorly against the app's
-dark background — typically dark text on a dark canvas.
+Small, scripts-and-docs-only change. No application code, no test logic.
+
+**Never deploy. Never self-merge.** Output is a PR.
 
 Production is `a7ce8d93-1f6a-4398-a0a9-302127bcfdd4`. Rollback target if
 anything goes wrong: `9b24838a-47b8-4516-84dd-92fc0f193eee`.
 
-**Never deploy. Never self-merge.** Output is a PR.
+## Why
 
----
+Two real problems with the current scripts, both hit in practice today:
 
-## Scope: fix the message body. Do not build a theme.
+1. **`test:print` serves `dist/` but never builds it.** Run it after a pull and
+   it silently reports on the *previous* bundle. This happened: 30 of 81 tests
+   failed with the pre-fix values (`#141417`, 1.58:1 contrast) against a merge
+   that had already fixed them. The tests must guarantee their own input.
 
-This brief covers **only** making message bodies legible. App chrome
-light/dark theming is tracked separately in MAC-594 part 2 and is explicitly
-out of scope here — do not start it, and do not restructure anything in
-anticipation of it.
+2. **`deploy` is `npm run build && wrangler deploy`** — a one-step, unreviewed
+   push straight to the apex with no version upload, no preview, no test gate.
+   It predates the versions workflow. It is also the word muscle memory reaches
+   for.
 
-## Diagnose before changing anything
+## Change
 
-Establish what is actually happening and report it:
+Replace the `scripts` block in `package.json` with:
 
-1. What does the app declare for `color-scheme`, and at what level?
-2. Does the message iframe inherit it? If the app declares
-   `color-scheme: light dark` and the OS is dark, the iframe document may
-   inherit dark, which flips the browser's *default* colors inside the email —
-   default text becomes light, default background transparent. Email content
-   then renders against the app's dark canvas using UA defaults it was never
-   designed for.
-3. What background, if any, is set on the iframe and on its document?
-4. Reproduce concretely: OS in dark mode, open an HTML email that sets text
-   colors but no background. A Word/Outlook-generated body is the realistic
-   case. Capture a screenshot of the broken state before touching anything.
+```json
+"scripts": {
+  "dev": "vite",
+  "build": "tsc --noEmit && vite build",
+  "preview": "vite preview",
+  "test": "vitest run",
+  "test:print": "npm run build && vitest run --config vitest.print.config.ts",
+  "release:preview": "npm test && npm run test:print && wrangler versions upload --preview-alias staging",
+  "release:promote": "wrangler versions deploy",
+  "deploy": "echo '\\n  Use: npm run release:preview  ->  verify the preview URL  ->  npm run release:promote\\n  See DEPLOYMENT.md §8.\\n' && exit 1"
+}
+```
 
-If the diagnosis turns out to be something other than `color-scheme`
-inheritance, say so — the hypothesis is not the requirement.
+Intent, in case the exact form needs adjusting:
 
-## The fix
+- `test:print` builds before running, so it can never test a stale bundle.
+- `release:preview` runs unit tests, then print tests, then uploads a
+  **zero-traffic** version. Any failure stops before anything reaches
+  Cloudflare. No redundant second build — `test:print` already produced
+  `dist/`.
+- `release:promote` is a deliberate separate step. Promoting is never a side
+  effect of building or testing.
+- `deploy` refuses and prints the correct procedure rather than firing.
+- A fixed `staging` alias keeps the preview URL constant instead of climbing
+  `staging2`, `staging3`, `staging4`.
 
-**Message bodies render on a light canvas, always, independent of app chrome.**
+Verify the echo escaping actually renders on both `sh` and `zsh` — if the
+`\\n` form is awkward in JSON, use whatever produces clean multi-line output,
+as long as it exits non-zero.
 
-Set `color-scheme: light` and an explicit light background on the message
-iframe's document. That is the whole intent.
+## Also update DEPLOYMENT.md §8
 
-**Do not modify any color the email itself declares.** No inversion, no
-"dark-mode-ifying", no filter, no heuristic recoloring, no adjusting text
-colors for contrast. If the sender specified a color, it renders as specified.
+The manual release procedure there currently spells out the raw wrangler
+commands. Rewrite it around `release:preview` / `release:promote`, keeping:
 
-This is what Apple Mail, Outlook and Gmail all do — HTML email renders on
-white even in dark mode. For this product there is a stronger reason:
-mailviewer produces exhibits. Recoloring a message alters the document. A
-rendering that does not match what the sender sent is a fidelity defect, not a
-styling choice.
+- what to check on the preview before promoting (this is the human gate)
+- the current production version ID and the rollback command
+- the note that preview URLs are on `workers.dev`, **outside the zone**, so
+  they cannot reveal zone-level problems such as the analytics beacon
+  (MAC-515) — that check only works against the apex, with a browser UA
 
-### Constraints
+**Docs and scripts change in the same commit.** They drifting apart is exactly
+why `SETUP.md` was deleted.
 
-- Do not weaken the iframe `sandbox` or the CSP. If the fix appears to need
-  either, stop and describe why in the PR.
-- Whatever is injected into the message document must be minimal and must not
-  override sender-declared styles. Prefer the lowest-specificity mechanism
-  that works.
-- Both render paths must agree. The print path already renders on white
-  paper — screen and print currently disagree, and this fix should close that
-  gap rather than widen it. Screen/print divergence is the same bug class that
-  produced the print-container leak and the 10px measuring-frame collapse.
-- Plain-text bodies and RTF-derived bodies go through a different element than
-  sanitized HTML. Cover all of them; a fix that only lands on the HTML iframe
-  leaves `.msg` and plain-text bodies broken.
+## Constraints
 
-## Tests
+- No application code changes. No changes to test assertions.
+- Do not add a CI job here — running the print suite in CI is MAC-596 and has
+  its own ticket.
+- Do not add Cloudflare credentials anywhere. Releases stay local and manual;
+  the repo holds no deploy token.
+- 267 unit tests and 81 print tests stay green.
 
-The recurring failure mode in this codebase is assertions that measure a proxy
-rather than what a user sees. Five instances so far, including an entire
-parser (`.olm`) that has never once worked while its tests stayed green.
+## Verify before opening the PR
 
-So: assert on **rendered appearance**, not on computed style properties or
-emitted CSS text.
-
-1. With the OS/browser in dark mode, render an email that declares text colors
-   and no background. Assert legibility via rendered output — screenshot
-   comparison or sampled pixel contrast between text and its backdrop. A test
-   asserting `color-scheme === 'light'` would pass on a build that is still
-   visually broken.
-2. Assert sender-declared colors are **unchanged** — an email specifying an
-   unusual text color renders in that color, not something "corrected".
-3. Cover sanitized HTML, plain text, and RTF-derived bodies.
-4. Screen and print produce the same body colors.
-5. Run in all three engines, in both light and dark OS preference.
-
-Confirm each new test fails against the current build. A regression test that
-has never failed is not yet evidence.
-
-## Fixtures
-
-David has `.eml`, `.mbox` and `.msg` fixtures with end-marker strings,
-including a Word-style `.msg` with wrapper CSS. Ask for them rather than
-rebuilding — they have been rebuilt twice already for want of being handed
-over. You will likely need to add one email that sets text colors without a
-background, which is the exact shape that triggers this.
-
-## Out of scope
-
-- App chrome theming, a theme toggle, or persisting a theme preference
-- Any change to parsing
-- Refactoring beyond what the fix requires
+- `npm run deploy` exits non-zero and prints the guidance
+- `npm run test:print` builds first — confirm by touching a source file and
+  checking the new output is reflected without a manual `npm run build`
+- `npm run release:preview` runs both suites and stops on failure. **Do not
+  let it complete an upload** — stop it before the wrangler step, or confirm
+  with David first. Uploading is harmless (zero traffic) but it is his call.
 
 ## Conventions
 
 - Git worktree; keep this PROMPT.md in the worktree root.
-- Bisect-clean commits, regression test in the same commit as the fix.
-- 267 unit tests stay green; nothing may introduce an external origin.
-- Dual validation: green CI and David's verification on a preview.
+- Bisect-clean commits.
 - Remove the worktree after pushing.

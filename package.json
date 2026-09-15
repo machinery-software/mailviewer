@@ -9,9 +9,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
-    "test:print": "vitest run --config vitest.print.config.ts"
+    "test:print": "npm run build && vitest run --config vitest.print.config.ts",
+    "release:preview": "npm test && npm run test:print && wrangler versions upload --preview-alias staging --message \"$(git rev-parse --short HEAD)\"",
+    "release:promote": "wrangler versions deploy",
+    "deploy": "printf '\\n  Use: npm run release:preview  ->  verify the preview URL  ->  npm run release:promote\\n  See DEPLOYMENT.md §8.\\n\\n' && exit 1"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
