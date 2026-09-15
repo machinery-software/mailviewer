@@ -5,6 +5,7 @@
 // would mean print fixtures that are only approximately the shape the parser
 // actually reads.
 import { buildCfb, storage, stream } from "../../src/lib/parse/__tests__/cfbBuilder.ts";
+import { COLOURED_LINE_STYLE, colouredLines } from "./fixtures.mjs";
 
 const PID = { MessageClass: 0x001a, Subject: 0x0037, Body: 0x1000, RtfCompressed: 0x1009, BodyHtml: 0x1013,
               SenderName: 0x0c1a, SenderEmail: 0x0c1f, DisplayTo: 0x0e04 };
@@ -113,4 +114,38 @@ export function msgWordViewportBody(paragraphs = 30, marker = "MSG-WORD-END-MARK
     `<div class=WordSection1 style="height:100vh;overflow:auto">${body}<p>${marker}</p></div>`;
 
   return buildCfb([...baseNodes("Word-authored .msg"), strProp(PID.BodyHtml, html)]);
+}
+
+/**
+ * A Word-authored .msg with coloured text and no background, carrying the
+ * wrapper CSS from David's `5-msg-word-html.msg` fixture.
+ */
+export function msgWordColouredBody(marker = "MSG-WORD-COLOUR-END-MARKER") {
+  const lines = colouredLines()
+    .map(([colour, text]) =>
+      `<p class=MsoNormal style="${COLOURED_LINE_STYLE}"><span style='color:${colour}'>${text}<o:p></o:p></span></p>`)
+    .join("\n");
+  const html =
+    `<html><head><style><!--\n` +
+    `html, body { height: 100%; }\n` +
+    `body { height: 100vh; overflow: auto; margin: 0; }\n` +
+    `.WordSection1 { height: 100%; min-height: 100vh; overflow-y: auto; }\n` +
+    `p.MsoNormal { margin: 0cm; font-size: 11.0pt; font-family: "Calibri", sans-serif; }\n` +
+    `--></style></head><body lang=EN-US><div class=WordSection1>\n${lines}\n` +
+    `<p class=MsoNormal>${marker}</p></div></body></html>`;
+  return buildCfb([...baseNodes("Word-authored .msg, coloured text"), strProp(PID.BodyHtml, html)]);
+}
+
+/** Coloured HTML encapsulated inside RTF: the RTF-derived path into the frame. */
+export function msgRtfEncapsulatedColouredHtml(marker = "MSG-RTF-COLOUR-END-MARKER") {
+  const lines = colouredLines()
+    .map(([colour, text]) =>
+      `{\\*\\htmltag64 <p style="${COLOURED_LINE_STYLE}"><span style="color:${colour}">}${text}` +
+      `{\\*\\htmltag64 </span></p>}\n`)
+    .join("");
+  const rtf =
+    `{\\rtf1\\ansi\\ansicpg1252\\fromhtml1\\deff0{\\fonttbl{\\f0 Calibri;}}\n` +
+    `{\\*\\htmltag64 <html><body>}\n${lines}` +
+    `{\\*\\htmltag64 <p>}${marker}{\\*\\htmltag64 </p></body></html>}\n}`;
+  return buildCfb([...baseNodes("Encapsulated-HTML .msg, coloured text"), binProp(PID.RtfCompressed, melaRtf(rtf))]);
 }

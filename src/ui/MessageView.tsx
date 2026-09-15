@@ -85,7 +85,7 @@ export default function MessageView({
   );
 
   const srcDoc = useMemo(
-    () => (highlighted ? buildIframeDocument(highlighted.html, true) : null),
+    () => (highlighted ? buildIframeDocument(highlighted.html) : null),
     [highlighted],
   );
 
@@ -227,7 +227,9 @@ export default function MessageView({
       )}
 
       {tab === "message" && (
-        <div className="msgbody">
+        // A body is the sender's document rather than part of the app, so it
+        // sits on a light canvas whichever element renders it.
+        <div className={srcDoc || message.text ? "msgbody msgbody-canvas" : "msgbody"}>
           {srcDoc ? (
             <iframe
               key={message.id}
