@@ -129,3 +129,59 @@ describe("sanitizeMessageHtml", () => {
     expect(html).not.toContain("javascript:");
   });
 });
+
+/**
+ * The sanitizer library itself, pinned at a version without a known bypass.
+ *
+ * GHSA-55q2-fjhq-7xh7 (DOMPurify <= 3.4.12): with `IN_PLACE`, a hook that
+ * removes an element left that element's detached descendants untouched --
+ * event handlers and all -- and a detached <img> still loads and fires them.
+ *
+ * sanitizeMessageHtml does not sanitize in place and its hook removes
+ * attributes, never elements, so it was not the vulnerable configuration. The
+ * test is here so that the dependency cannot slide back to an affected
+ * version, whatever this module does with it in future.
+ */
+describe("DOMPurify 3.4.16: what it lets through that 3.4.13 did not", () => {
+  it("keeps the SVG pointer-events and vector-effect attributes, and nothing that runs or loads", () => {
+    // The one change to sanitizer output between 3.4.13 and 3.4.16, across
+    // 11,825 probe inputs run through both with this module's configuration:
+    // these two presentation attributes joined the SVG allow-list. Neither can
+    // load or execute anything, and `style="pointer-events:none"` was already
+    // allowed.
+    const { html } = sanitizeMessageHtml(
+      `<svg viewBox="0 0 1 1"><rect width="1" height="1" pointer-events="none" ` +
+        `vector-effect="non-scaling-stroke" onclick="steal()"></rect></svg>`,
+      noAttachments,
+    );
+    expect(html).toContain('pointer-events="none"');
+    expect(html).toContain('vector-effect="non-scaling-stroke"');
+    expect(html).not.toContain("onclick");
+  });
+});
+
+describe("DOMPurify: GHSA-55q2-fjhq-7xh7", () => {
+  it("neutralises the detached subtree when a hook removes an element in place", async () => {
+    const { default: DOMPurify } = await import("dompurify");
+
+    const root = document.createElement("div");
+    root.innerHTML =
+      `<footer><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" ` +
+      `onload="window.__xss = true"></footer><div>safe</div>`;
+    // Hold on to the image: after sanitizing it is no longer reachable from root.
+    const img = root.querySelector("img")!;
+
+    DOMPurify.addHook("uponSanitizeElement", (node) => {
+      if ((node as Element).tagName === "FOOTER") (node as Element).remove();
+    });
+    try {
+      DOMPurify.sanitize(root, { ALLOWED_TAGS: ["div", "#text", "footer"], IN_PLACE: true });
+    } finally {
+      DOMPurify.removeAllHooks();
+    }
+
+    expect(root.innerHTML).toBe("<div>safe</div>");
+    // The removed subtree must not keep anything that can run or load.
+    expect(img.getAttribute("onload")).toBeNull();
+  });
+});
