@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 import type { Address, Attachment, Message, ParsedArchive } from "../model";
 import { singleMessageArchive } from "./archive";
 import { partContentLocations } from "./mhtml";
+import { MAX_MIME_PARTS, capMimeParts } from "./mimeParts";
 import { extractTnefAttachments } from "./tnef";
 
 /**
@@ -108,7 +109,8 @@ function expandTnefParts(message: Message, warnings: string[]): void {
  * Parse one RFC822/MIME message into the common model.
  *
  * `warnings`, when given, collects non-fatal problems (currently: a winmail.dat
- * part that would not expand) for the archive to report.
+ * part that would not expand) for the archive to report. A message cut off at
+ * the MIME part cap is not one of them: it says so itself, in `omittedParts`.
  */
 export async function parseEmlMessage(
   bytes: Uint8Array,
@@ -119,9 +121,14 @@ export async function parseEmlMessage(
 ): Promise<Message> {
   const source = format === "emlx" ? stripEmlxWrapper(bytes) : bytes;
 
+  // postal-mime's cost is quadratic in the number of parts, so a message with
+  // an absurd number of them is cut off before it gets there -- see
+  // mimeParts.ts. `raw` below is still the whole message.
+  const capped = capMimeParts(source);
+
   // postal-mime wants a standalone ArrayBuffer; a subarray's buffer may be the
   // whole multi-gigabyte mbox, so copy the slice we actually mean.
-  const buf = source.slice().buffer as ArrayBuffer;
+  const buf = capped.bytes.slice().buffer as ArrayBuffer;
   const email = await new PostalMime().parse(buf);
 
   const attachments: Attachment[] = (email.attachments ?? []).map((att, i) => {
@@ -189,6 +196,10 @@ export async function parseEmlMessage(
       hasAttachments: attachments.some((a) => !a.inline),
     },
   };
+
+  if (capped.omittedParts > 0) {
+    message.omittedParts = { total: capped.totalParts, shown: MAX_MIME_PARTS };
+  }
 
   expandTnefParts(message, warnings);
 

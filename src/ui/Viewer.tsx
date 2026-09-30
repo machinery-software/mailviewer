@@ -10,6 +10,7 @@ import { ReportBlock } from "./ReportProblem";
 import { formatFromFilename } from "../lib/report";
 import PrintOut from "./PrintOut";
 import { type PrintScope, messagesToPrint } from "../lib/printing";
+import { describeOmittedParts } from "../lib/parse/mimeParts";
 
 function flattenFolders(f: Folder, depth = 0): Array<{ folder: Folder; depth: number }> {
   return [{ folder: f, depth }, ...f.children.flatMap((c) => flattenFolders(c, depth + 1))];
@@ -115,6 +116,13 @@ export default function Viewer() {
 
   const warningCount = useMemo(
     () => archives.reduce((n, a) => n + a.warnings.length, 0),
+    [archives],
+  );
+
+  // Messages cut off at the MIME part limit. Not a warning: nothing was
+  // damaged, and the reader is owed the specifics rather than a count.
+  const partLimitNotice = useMemo(
+    () => describeOmittedParts(archives.flatMap((a) => a.messages)),
     [archives],
   );
 
@@ -314,8 +322,9 @@ export default function Viewer() {
       }}
       onDrop={onDrop}
     >
-      {(warningCount > 0 || errors.length > 0) && (
+      {(warningCount > 0 || errors.length > 0 || partLimitNotice) && (
         <div className="warnbar">
+          {partLimitNotice && <span className="warnbar-partlimit">{partLimitNotice} </span>}
           {warningCount > 0 && (
             <>
               Opened with {warningCount.toLocaleString()}{" "}

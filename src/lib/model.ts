@@ -77,6 +77,14 @@ export interface Message {
   /** The original bytes, when we have them. Enables "download original". */
   raw?: Uint8Array;
 
+  /**
+   * Set when the message has more MIME parts than the parser reads (see
+   * parse/mimeParts.ts): how many it declares, and how many are shown. Nothing
+   * is damaged -- the later parts were left out -- so this is reported on its
+   * own terms rather than counted among the archive's warnings.
+   */
+  omittedParts?: { total: number; shown: number };
+
   /** Path within the containing archive, e.g. ["Inbox", "Clients"]. */
   folderPath: string[];
 
