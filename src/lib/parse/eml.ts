@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 import type { Address, Attachment, Message, ParsedArchive } from "../model";
 import { singleMessageArchive } from "./archive";
 import { partContentLocations } from "./mhtml";
+import { MAX_MIME_PARTS, capMimeParts } from "./mimeParts";
 import { extractTnefAttachments } from "./tnef";
 
 /**
@@ -107,8 +108,9 @@ function expandTnefParts(message: Message, warnings: string[]): void {
 /**
  * Parse one RFC822/MIME message into the common model.
  *
- * `warnings`, when given, collects non-fatal problems (currently: a winmail.dat
- * part that would not expand) for the archive to report.
+ * `warnings`, when given, collects non-fatal problems (a winmail.dat part that
+ * would not expand; a message cut off at the MIME part cap) for the archive to
+ * report.
  */
 export async function parseEmlMessage(
   bytes: Uint8Array,
@@ -119,9 +121,20 @@ export async function parseEmlMessage(
 ): Promise<Message> {
   const source = format === "emlx" ? stripEmlxWrapper(bytes) : bytes;
 
+  // postal-mime's cost is quadratic in the number of parts, so a message with
+  // an absurd number of them is cut off before it gets there -- see
+  // mimeParts.ts. `raw` below is still the whole message.
+  const capped = capMimeParts(source);
+  if (capped.omittedParts > 0) {
+    warnings.push(
+      `This message has ${capped.totalParts} MIME parts; only the first ${MAX_MIME_PARTS} were read. ` +
+        "Later parts and attachments are missing.",
+    );
+  }
+
   // postal-mime wants a standalone ArrayBuffer; a subarray's buffer may be the
   // whole multi-gigabyte mbox, so copy the slice we actually mean.
-  const buf = source.slice().buffer as ArrayBuffer;
+  const buf = capped.bytes.slice().buffer as ArrayBuffer;
   const email = await new PostalMime().parse(buf);
 
   const attachments: Attachment[] = (email.attachments ?? []).map((att, i) => {
