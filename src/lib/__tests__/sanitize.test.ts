@@ -142,6 +142,24 @@ describe("sanitizeMessageHtml", () => {
  * test is here so that the dependency cannot slide back to an affected
  * version, whatever this module does with it in future.
  */
+describe("DOMPurify 3.4.16: what it lets through that 3.4.13 did not", () => {
+  it("keeps the SVG pointer-events and vector-effect attributes, and nothing that runs or loads", () => {
+    // The one change to sanitizer output between 3.4.13 and 3.4.16, across
+    // 11,825 probe inputs run through both with this module's configuration:
+    // these two presentation attributes joined the SVG allow-list. Neither can
+    // load or execute anything, and `style="pointer-events:none"` was already
+    // allowed.
+    const { html } = sanitizeMessageHtml(
+      `<svg viewBox="0 0 1 1"><rect width="1" height="1" pointer-events="none" ` +
+        `vector-effect="non-scaling-stroke" onclick="steal()"></rect></svg>`,
+      noAttachments,
+    );
+    expect(html).toContain('pointer-events="none"');
+    expect(html).toContain('vector-effect="non-scaling-stroke"');
+    expect(html).not.toContain("onclick");
+  });
+});
+
 describe("DOMPurify: GHSA-55q2-fjhq-7xh7", () => {
   it("neutralises the detached subtree when a hook removes an element in place", async () => {
     const { default: DOMPurify } = await import("dompurify");
