@@ -99,4 +99,4 @@ src/worker/parse.worker.ts Parsing runs off the main thread.
 
 ## Licence
 
-MIT.
+MIT — see [`LICENSE`](LICENSE).
