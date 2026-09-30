@@ -12,8 +12,8 @@
  *
  * (Node 24, one text part of one byte each) -- and for the whole of that time
  * the parse worker can do nothing else. So a message with more parts than any
- * real one has is cut off *before* it reaches postal-mime, and the archive
- * says so.
+ * real one has is cut off *before* it reaches postal-mime, and the message
+ * records that it was (`Message.omittedParts`) so the viewer can say so.
  *
  * Only the bytes handed to the MIME parser are shortened. `Message.raw` keeps
  * the original, so "download original" still gives back the whole file.
@@ -131,4 +131,46 @@ export function capMimeParts(bytes: Uint8Array, max = MAX_MIME_PARTS): CappedMim
   if (cutAt === -1) return untouched;
 
   return { bytes: bytes.subarray(0, cutAt), totalParts: parts, omittedParts: parts - max };
+}
+
+/**
+ * What the viewer tells the reader about messages that were cut off at the cap.
+ *
+ * This is its own sentence, not one of the archive's warnings. Those mean
+ * "something here was damaged"; nothing here was. The reader -- who may be
+ * about to print the message as a record -- needs to know that what they are
+ * looking at is incomplete, by how much, and why.
+ *
+ * Returns null when no message is over the limit.
+ */
+export function describeOmittedParts(
+  messages: ReadonlyArray<{ subject: string; omittedParts?: { total: number; shown: number } }>,
+): string | null {
+  const over = messages.filter((m) => m.omittedParts);
+  if (over.length === 0) return null;
+
+  const n = (x: number) => x.toLocaleString("en-US");
+  const name = (subject: string) => {
+    const s = subject.trim();
+    if (s === "") return "A message with no subject";
+    return `\u201c${s.length > 60 ? `${s.slice(0, 60)}\u2026` : s}\u201d`;
+  };
+  const limit = n(over[0].omittedParts!.shown);
+
+  if (over.length === 1) {
+    const { total } = over[0].omittedParts!;
+    return (
+      `${name(over[0].subject)} has ${n(total)} MIME parts, which exceeds the ${limit}-part limit. ` +
+      `Only the first ${limit} parts are shown; the other ${n(total - over[0].omittedParts!.shown)}, ` +
+      "and any attachments among them, are not."
+    );
+  }
+
+  const listed = over.slice(0, 3).map((m) => name(m.subject));
+  const more = over.length - listed.length;
+  return (
+    `${n(over.length)} messages exceed the ${limit}-part limit. Only the first ${limit} MIME parts of each ` +
+    `are shown; later parts, and any attachments among them, are not: ${listed.join(", ")}` +
+    `${more > 0 ? ` and ${n(more)} more` : ""}.`
+  );
 }

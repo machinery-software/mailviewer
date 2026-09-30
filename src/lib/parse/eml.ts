@@ -108,9 +108,9 @@ function expandTnefParts(message: Message, warnings: string[]): void {
 /**
  * Parse one RFC822/MIME message into the common model.
  *
- * `warnings`, when given, collects non-fatal problems (a winmail.dat part that
- * would not expand; a message cut off at the MIME part cap) for the archive to
- * report.
+ * `warnings`, when given, collects non-fatal problems (currently: a winmail.dat
+ * part that would not expand) for the archive to report. A message cut off at
+ * the MIME part cap is not one of them: it says so itself, in `omittedParts`.
  */
 export async function parseEmlMessage(
   bytes: Uint8Array,
@@ -125,12 +125,6 @@ export async function parseEmlMessage(
   // an absurd number of them is cut off before it gets there -- see
   // mimeParts.ts. `raw` below is still the whole message.
   const capped = capMimeParts(source);
-  if (capped.omittedParts > 0) {
-    warnings.push(
-      `This message has ${capped.totalParts} MIME parts; only the first ${MAX_MIME_PARTS} were read. ` +
-        "Later parts and attachments are missing.",
-    );
-  }
 
   // postal-mime wants a standalone ArrayBuffer; a subarray's buffer may be the
   // whole multi-gigabyte mbox, so copy the slice we actually mean.
@@ -202,6 +196,10 @@ export async function parseEmlMessage(
       hasAttachments: attachments.some((a) => !a.inline),
     },
   };
+
+  if (capped.omittedParts > 0) {
+    message.omittedParts = { total: capped.totalParts, shown: MAX_MIME_PARTS };
+  }
 
   expandTnefParts(message, warnings);
 

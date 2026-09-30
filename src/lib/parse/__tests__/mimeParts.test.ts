@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import PostalMime from "postal-mime";
 import { parseEml } from "../eml";
 import { parseMbox } from "../mbox";
-import { MAX_MIME_PARTS, capMimeParts, declaredBoundaries } from "../mimeParts";
+import { MAX_MIME_PARTS, capMimeParts, declaredBoundaries, describeOmittedParts } from "../mimeParts";
 
 const enc = new TextEncoder();
 const HEAD = "From: a@example.com\r\nTo: b@example.com\r\nSubject: parts\r\nMIME-Version: 1.0\r\n";
@@ -16,7 +16,7 @@ function manyParts(n: number, contentType = 'Content-Type: multipart/mixed; boun
 }
 
 describe("MIME part cap", () => {
-  it("opens a 20,000-part message quickly, reads the first 1,000 parts, and says so", async () => {
+  it("opens a 20,000-part message quickly, reads the first 1,000 parts, and records what it left out", async () => {
     // 870 KB. postal-mime is quadratic in sibling parts: uncapped, this message
     // holds the parse worker for about seven seconds, and a larger one for as
     // long as its author likes.
@@ -27,9 +27,9 @@ describe("MIME part cap", () => {
     const elapsedMs = performance.now() - started;
 
     const message = archive.messages[0];
-    expect(archive.warnings).toEqual([
-      "This message has 20000 MIME parts; only the first 1000 were read. Later parts and attachments are missing.",
-    ]);
+    // Not a warning: nothing is damaged. The message says what was left out.
+    expect(archive.warnings).toEqual([]);
+    expect(message.omittedParts).toEqual({ total: 20_000, shown: 1000 });
     expect(message.subject).toBe("parts");
     expect(message.text).toContain("part 1\n");
     expect(message.text).toContain("part 1000\n");
@@ -45,6 +45,7 @@ describe("MIME part cap", () => {
 
     const archive = await parseEml(bytes, "at-cap.eml");
     expect(archive.warnings).toEqual([]);
+    expect(archive.messages[0].omittedParts).toBeUndefined();
     expect(archive.messages[0].text).toContain(`part ${MAX_MIME_PARTS}\n`);
   });
 
@@ -146,8 +147,45 @@ describe("MIME part cap", () => {
       "From: c@example.com\r\nSubject: ordinary\r\n\r\nhello\r\n";
     const archive = await parseMbox(new Blob([mbox]), "two.mbox");
     expect(archive.messages.map((m) => m.subject)).toEqual(["parts", "ordinary"]);
-    expect(archive.warnings).toEqual([
-      "This message has 1250 MIME parts; only the first 1000 were read. Later parts and attachments are missing.",
-    ]);
+    expect(archive.messages.map((m) => m.omittedParts)).toEqual([{ total: 1250, shown: 1000 }, undefined]);
+    expect(archive.warnings).toEqual([]);
+  });
+});
+
+describe("what the reader is told about a capped message", () => {
+  const capped = (subject: string, total = 20_000) => ({ subject, omittedParts: { total, shown: 1000 } });
+
+  it("says nothing when no message is over the limit", () => {
+    expect(describeOmittedParts([])).toBeNull();
+    expect(describeOmittedParts([{ subject: "fine" }])).toBeNull();
+  });
+
+  it("names the message, the limit, how much is shown and how much is not", () => {
+    expect(describeOmittedParts([{ subject: "fine" }, capped("Schedule of loss")])).toBe(
+      "\u201cSchedule of loss\u201d has 20,000 MIME parts, which exceeds the 1,000-part limit. " +
+        "Only the first 1,000 parts are shown; the other 19,000, and any attachments among them, are not.",
+    );
+  });
+
+  it("copes with a missing or very long subject", () => {
+    expect(describeOmittedParts([capped("  ", 1001)])).toBe(
+      "A message with no subject has 1,001 MIME parts, which exceeds the 1,000-part limit. " +
+        "Only the first 1,000 parts are shown; the other 1, and any attachments among them, are not.",
+    );
+    const long = describeOmittedParts([capped("x".repeat(200))])!;
+    expect(long.startsWith(`\u201c${"x".repeat(60)}\u2026\u201d has 20,000`)).toBe(true);
+  });
+
+  it("summarises several messages without listing them all", () => {
+    expect(describeOmittedParts(["a", "b", "c", "d", "e"].map((s) => capped(s)))).toBe(
+      "5 messages exceed the 1,000-part limit. Only the first 1,000 MIME parts of each are shown; later parts, " +
+        "and any attachments among them, are not: \u201ca\u201d, \u201cb\u201d, \u201cc\u201d and 2 more.",
+    );
+  });
+
+  it("does not use the word the warnings bar uses for damaged input", () => {
+    for (const text of [describeOmittedParts([capped("a")])!, describeOmittedParts([capped("a"), capped("b")])!]) {
+      expect(text).not.toMatch(/damaged|skipped|problem/i);
+    }
   });
 });

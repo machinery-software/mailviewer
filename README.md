@@ -97,8 +97,9 @@ src/worker/parse.worker.ts Parsing runs off the main thread.
 - Everything is held in memory, so a very large `.pst` is bounded by your tab's
   available RAM.
 - A message is read up to its 1,000th MIME part. Nothing a mail client sends
-  comes near that; a file built to have more is cut off there, and the viewer
-  says it opened with a problem. The original file is untouched.
+  comes near that. A message with more is shown up to that point, and the bar
+  above the viewer says which message it is, that it exceeds the limit, and
+  how many parts are not shown. The original file is untouched.
 
 ## Licence
 
