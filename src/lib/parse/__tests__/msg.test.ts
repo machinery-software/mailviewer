@@ -11,7 +11,9 @@ import {
   parseSubstgName,
   parseTransportHeaders,
   readFiletime,
+  readPropertyBag,
 } from "../msg.ts";
+import { parseCfb } from "../cfb.ts";
 import { buildCfb, storage, stream, type BuildNode } from "./cfbBuilder.ts";
 
 const enc = new TextEncoder();
@@ -612,5 +614,68 @@ describe("parseMsg: robustness", () => {
     );
     expect(seen.length).toBeGreaterThanOrEqual(2);
     expect(seen[seen.length - 1].fraction).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-valued property elements
+// ---------------------------------------------------------------------------
+
+describe("parseMsg: multi-valued property elements", () => {
+  /** One element stream of a multi-valued string property: `...101F-0000000N`. */
+  const mvElement = (id: number, index: number, value: string): BuildNode =>
+    stream(
+      `${tagName(id, PT.MV_FLAG | PT.STRING)}-${index.toString(16).toUpperCase().padStart(8, "0")}`,
+      utf16(value),
+    );
+
+  it("is not slowed down by an element that claims index 0xFFFFFFFE", async () => {
+    // A 3 KB file. The element's index comes straight from its stream name, and
+    // it used to be stored at that index of an array that was then walked slot
+    // by slot: four billion iterations for one element, over a minute in which
+    // the parse worker (and anything else running these parsers) is stuck.
+    const bytes = buildCfb([
+      strProp(0x0037, "Sparse multi-valued property"),
+      strProp(0x1000, "The body is still readable."),
+      mvElement(0x8000, 0xfffffffe, "x"),
+    ]);
+    expect(bytes.length).toBeLessThan(4096);
+
+    const started = performance.now();
+    const archive = await parseMsg(bytes, "sparse.msg");
+    const elapsedMs = performance.now() - started;
+
+    expect(archive.messages[0].subject).toBe("Sparse multi-valued property");
+    expect(archive.messages[0].text).toBe("The body is still readable.");
+    // Measured cost is the number of streams in the file, not the largest
+    // index any of them names. A second is three orders of magnitude of slack.
+    expect(elapsedMs).toBeLessThan(1000);
+    // The timeout is long on purpose: if the loop ever comes back, this should
+    // fail on the assertion above, saying how long it took, rather than on a
+    // bare "test timed out".
+  }, 600_000);
+
+  it("keeps elements in index order and skips gaps, whatever order the streams are in", () => {
+    const cfb = parseCfb(
+      buildCfb([
+        mvElement(0x8000, 2, "two"),
+        mvElement(0x8000, 0, "zero"),
+        mvElement(0x8001, 0xfffffffe, "far"),
+        mvElement(0x8001, 1, "near"),
+        mvElement(0x8002, 0, "only"),
+      ]),
+    );
+    const bag = readPropertyBag(cfb, cfb.root, { headerSize: 32, warn: () => {} });
+    expect(bag.get(0x8000)?.value).toEqual(["zero", "two"]);
+    expect(bag.get(0x8001)?.value).toEqual(["near", "far"]);
+    expect(bag.get(0x8002)?.value).toEqual(["only"]);
+  });
+
+  it("decodes a multi-valued property whose only stream is its length table as empty", () => {
+    // Outlook writes a bare `...101F` stream (the element-length table) next to
+    // the `-0000000N` element streams; with no elements the value is [].
+    const cfb = parseCfb(buildCfb([stream(tagName(0x8003, PT.MV_FLAG | PT.STRING), new Uint8Array(4))]));
+    const bag = readPropertyBag(cfb, cfb.root, { headerSize: 32, warn: () => {} });
+    expect(bag.get(0x8003)?.value).toEqual([]);
   });
 });

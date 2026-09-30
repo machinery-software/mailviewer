@@ -417,7 +417,8 @@ interface BagOptions {
   warn: (msg: string) => void;
 }
 
-function readPropertyBag(
+/** Exported for tests; parseMsg is the way in. */
+export function readPropertyBag(
   cfb: CfbFile,
   storage: CfbEntry,
   opts: BagOptions,
@@ -428,7 +429,11 @@ function readPropertyBag(
   // elements of multi-valued properties by tag. We cannot decode yet -- the
   // codepage that ANSI strings depend on is itself a property.
   const scalars = new Map<number, { tag: PropTag; bytes: Uint8Array }>();
-  const multi = new Map<number, { tag: PropTag; elements: Uint8Array[] }>();
+  // Elements are keyed by the index in their stream name, not stored at it.
+  // The index is whatever the file says -- up to 0xFFFFFFFF -- and an array
+  // assigned at that index has four billion slots to iterate: a 3 KB file
+  // with one such element used to hold the parser for about a minute.
+  const multi = new Map<number, { tag: PropTag; elements: Map<number, Uint8Array> }>();
 
   for (const child of storage.children) {
     if (child.type !== "stream") continue;
@@ -444,10 +449,10 @@ function readPropertyBag(
     if (tag.index !== undefined) {
       let slot = multi.get(tag.id);
       if (!slot) {
-        slot = { tag, elements: [] };
+        slot = { tag, elements: new Map() };
         multi.set(tag.id, slot);
       }
-      slot.elements[tag.index] = bytes;
+      slot.elements.set(tag.index, bytes);
     } else if (isMultiValued(tag.type)) {
       // The bare stream of a multi-valued property is the length/offset table.
       // For MV strings and binaries the elements are the `-NNNNNNNN` streams,
@@ -456,7 +461,7 @@ function readPropertyBag(
       // stream *is* the data.
       const bt = baseType(tag.type);
       if (bt === PT.STRING || bt === PT.STRING8 || bt === PT.BINARY) {
-        if (!multi.has(tag.id)) multi.set(tag.id, { tag, elements: [] });
+        if (!multi.has(tag.id)) multi.set(tag.id, { tag, elements: new Map() });
       } else {
         scalars.set(tag.id, { tag, bytes });
       }
@@ -514,10 +519,12 @@ function readPropertyBag(
 
   for (const { tag, elements } of multi.values()) {
     try {
+      // In index order, whatever order the directory listed the streams in.
+      // A missing index is simply absent: the cost is the number of element
+      // streams present, never the largest index one of them names.
       const values: PropValue[] = [];
-      for (const el of elements) {
-        if (!el) continue; // sparse: an element stream was missing
-        values.push(decodeScalar(tag.type, el, codepage));
+      for (const index of [...elements.keys()].sort((a, b) => a - b)) {
+        values.push(decodeScalar(tag.type, elements.get(index)!, codepage));
       }
       bag.set({ id: tag.id, type: tag.type, value: values as PropValue });
     } catch (e) {
