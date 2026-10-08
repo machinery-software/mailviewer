@@ -11,9 +11,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:print": "npm run build && vitest run --config vitest.print.config.ts",
-    "release:preview": "npm test && npm run test:print && wrangler versions upload --preview-alias staging --message \"$(git rev-parse --short HEAD)\"",
+    "release:preview": "npm test && npm run test:print && npm run security:gate && wrangler versions upload --preview-alias staging --message \"$(git rev-parse --short HEAD)\"",
     "release:promote": "wrangler versions deploy",
-    "deploy": "printf '\\n  Use: npm run release:preview  ->  verify the preview URL  ->  npm run release:promote\\n  See DEPLOYMENT.md §8.\\n\\n' && exit 1"
+    "deploy": "printf '\\n  Use: npm run release:preview  ->  verify the preview URL  ->  npm run release:promote\\n  See DEPLOYMENT.md §8.\\n\\n' && exit 1",
+    "security:gate": "node scripts/security-gate.mjs --config security-gate.json --lockfile package-lock.json --run-npm-audit"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
