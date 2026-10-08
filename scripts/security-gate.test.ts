@@ -3,7 +3,7 @@
 // (scripts/security-gate-fixtures, re-recorded by hand with record.sh). No
 // test here touches the network.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -179,6 +179,15 @@ describe("the command line", () => {
     expect(cli([...base("clean"), "--osv-json", join(f("clean"), "osv.json")]).status).toBe(0);
     expect(cli([...base("shipped-high"), "--osv-json", join(f("shipped-high"), "osv.json")]).status).toBe(1);
     expect(cli([...base("clean")]).status).toBe(2);
+  });
+
+  it("refuses when run through a symlinked path, as from macOS's /var or a linked checkout", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gate-link-"));
+    const link = join(dir, "security-gate.mjs");
+    symlinkSync(gate, link);
+    const r = spawnSync(process.execPath, [link, ...base("shipped-high"), "--osv-json", join(f("shipped-high"), "osv.json")], { encoding: "utf8" });
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toContain("REFUSED");
   });
 
   it("cannot decide, and so refuses, when a scanner is missing", () => {

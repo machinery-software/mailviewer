@@ -28,9 +28,9 @@
 // recorded JSON instead. --github adds GitHub Actions annotations and a job
 // summary.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const SEVERITIES = ["low", "moderate", "high", "critical"];
 const rank = (s) => SEVERITIES.indexOf(s);
@@ -273,7 +273,13 @@ export function main(argv, out = console) {
   return 0;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Run as a command? Compared as real paths: a path through a symlink (macOS's
+// /var -> /private/var, a linked checkout) must not make the gate skip
+// main() and exit 0 having checked nothing.
+const invokedDirectly = (() => {
+  try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
+})();
+if (invokedDirectly) {
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (e) {
