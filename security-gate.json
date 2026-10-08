@@ -1,0 +1,6 @@
+{
+  "_comment": "Read by scripts/security-gate.mjs (CI, and npm run release:preview). See SECURITY.md: 'Dependency advisories'.",
+  "shipped": "production",
+  "reachable": ["dompurify", "postal-mime", "fflate"],
+  "allowlist": []
+}

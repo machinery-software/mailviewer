@@ -57,7 +57,7 @@ export default defineConfig({
     // Most parser tests are pure byte-shuffling and need no DOM. The sanitizer
     // tests opt into jsdom per-file with a @vitest-environment docblock.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
   },
   server: {
     headers: {
