@@ -454,7 +454,7 @@ broken CSP to production without a human having looked at the thing first.
 A release is two commands with a person between them:
 
 ```bash
-npm run release:preview                            # unit tests → build → print tests → upload, no traffic
+npm run release:preview                            # unit tests → build → print tests → security gate → upload, no traffic
                                                    # then verify the preview yourself (step 3)
 npm run release:promote -- <version-id>@100 --yes  # send production traffic to it
 ```
@@ -515,7 +515,7 @@ git status --short        # want: no output -- what gets uploaded is what is on 
 npm run release:preview
 ```
 
-That runs three steps and stops at the first failure, before anything reaches
+That runs four steps and stops at the first failure, before anything reaches
 Cloudflare:
 
 1. **`npm test`** — the unit suite.
@@ -524,7 +524,14 @@ Cloudflare:
    of the script so the suite cannot report on a stale bundle, which it once
    did: run after a pull, 30 of 81 tests failed with values from before a fix
    that was already merged.
-3. **`wrangler versions upload --preview-alias staging`**, with the short commit
+3. **`npm run security:gate`** — `npm audit --omit=dev` on `package-lock.json`,
+   decided by `scripts/security-gate.mjs`: a high or critical advisory in a
+   package the site ships refuses the release, as does a moderate one in a
+   package that reads mail (DOMPurify, postal-mime, fflate). Build-only
+   packages never block. It needs the network, as the upload does; if npm
+   cannot reach the registry the gate refuses rather than guess. SECURITY.md
+   has the rules and the allowlist for an advisory triaged as unreachable.
+4. **`wrangler versions upload --preview-alias staging`**, with the short commit
    as the version message — the no-traffic half of a deploy. The version
    exists and gets a preview URL; the live deployment is untouched.
 
