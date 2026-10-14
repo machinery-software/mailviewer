@@ -1,0 +1,10 @@
+{
+  "name": "gate-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "dompurify": "3.1.4",
+    "postal-mime": "2.7.5"
+  },
+  "devDependencies": {}
+}

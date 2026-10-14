@@ -1,0 +1,53 @@
+name: Security
+
+# Known-vulnerable dependencies (MAC-674). On every PR, on main, and weekly, so
+# an advisory published against a package we already ship is seen within a
+# week even when nothing changes here. Dependabot alerts cover the same ground
+# within hours; this is the gate that fails the build.
+#
+# scripts/security-gate.mjs decides: a high or critical advisory in a package
+# the site ships fails, as does a moderate one in a package that reads mail
+# (security-gate.json). Build-only advisories are warnings. A failure on the
+# weekly run emails whoever GitHub notifies for this workflow; SECURITY.md says
+# what to do next.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: OSV-Scanner and npm audit
+    runs-on: ubuntu-latest
+    env:
+      OSV_SCANNER_VERSION: v2.6.0
+      # sha256 of osv-scanner_linux_amd64 from that release's SHA256SUMS.
+      OSV_SCANNER_SHA256: ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install OSV-Scanner (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/$OSV_SCANNER_VERSION/osv-scanner_linux_amd64"
+          echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/osv-scanner" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # No npm ci: both scanners read package-lock.json; nothing is installed
+      # or run from the dependencies themselves.
+      - name: Security gate
+        run: >
+          node scripts/security-gate.mjs --config security-gate.json --lockfile package-lock.json
+          --run-osv --run-npm-audit --github
