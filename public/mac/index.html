@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mailviewer for Mac: open any email file on your Mac</title>
+<meta name="description" content="Open .msg, .eml, .mbox, Apple Mail mailboxes and Google Takeout exports on a Mac, with Space bar previews. Nothing leaves the Mac. Plans for teams and organizations.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!-- MAC-715: from the design canvas's purchase page. A static page: no script,
+     nothing loaded from another origin, under the site's own CSP (public/_headers).
+     The Buy buttons are plain links; nothing commerce-related runs on this origin. -->
+<style>
+body{margin:0;background:#F7F8F6}
+a{color:#0F6B5C}a:hover{color:#0A4F44}
+.mv-wrap{max-width:1120px;margin:0 auto;padding:0 24px;box-sizing:border-box}
+.mv-hero{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:56px;align-items:center}
+.mv-shot{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1.3fr)}
+@media (max-width: 900px){
+.mv-hero{grid-template-columns:minmax(0,1fr)}
+.mv-shot{grid-template-columns:minmax(0,1fr)}
+.mv-shot-side{display:none}
+}
+
+main a.btn:focus-visible, a:focus-visible { outline: 3px solid #0F6B5C; outline-offset: 2px }
+</style>
+</head>
+<body>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif; color: #142321; background: #F7F8F6; min-height: 100vh">
+
+<header style="background: #FFFFFF; border-bottom: 1px solid #DDE3E1">
+<nav class="mv-wrap" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 14px; padding-bottom: 14px" aria-label="Main">
+<a href="/mac" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #142321; font-weight: 600; font-size: 17px">
+<svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect x="0" y="0" width="32" height="32" rx="8" fill="#5FC4AF"></rect><rect x="6" y="9" width="17" height="12" rx="2" fill="#FFFFFF"></rect><path d="M6.5 10 L14.5 16 L22.5 10" fill="none" stroke="#1F6F62" stroke-width="1.6"></path><circle cx="21" cy="19.5" r="4.2" fill="none" stroke="#FFFFFF" stroke-width="1.8"></circle><path d="M24 22.5 L27 25.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"></path></svg>
+Mailviewer
+</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px; font-size: 15px">
+<a href="/" style="color: #4A5A57; text-decoration: none">Web app</a>
+<a href="/mac" style="color: #142321; text-decoration: none; font-weight: 600" aria-current="page">Mac</a>
+<a href="https://updates.mailviewer.app/" style="color: #4A5A57; text-decoration: none">Downloads</a>
+<a href="https://updates.mailviewer.app/admin/" style="color: #4A5A57; text-decoration: none">For IT admins</a>
+<a href="#pricing" style="background: #0F7A69; color: #FFFFFF; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Buy</a>
+</div>
+</nav>
+</header>
+
+<section class="mv-wrap" style="padding-top: 80px; padding-bottom: 72px">
+<div class="mv-hero">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #0F6B5C">Mailviewer for Mac</p>
+<h1 style="margin: 0; font-size: 52px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 700">Open any email file on your Mac. Nothing leaves it.</h1>
+<p style="margin: 0; font-size: 19px; line-height: 1.5; color: #4A5A57">Outlook .msg and .eml messages, .mbox files, Apple Mail mailboxes and Google Takeout exports, in a window or straight from the Space bar. No mail account, no upload.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 6px">
+<a href="#pricing" style="background: #0F7A69; color: #FFFFFF; text-decoration: none; padding: 14px 22px; border-radius: 10px; font-weight: 600; font-size: 16px; min-height: 48px; box-sizing: border-box; display: inline-flex; align-items: center">See plans</a>
+<a href="/" style="background: #FFFFFF; color: #142321; text-decoration: none; padding: 14px 22px; border-radius: 10px; font-weight: 600; font-size: 16px; border: 1px solid #C9D2CF; min-height: 48px; box-sizing: border-box; display: inline-flex; align-items: center">Try the free web app</a>
+</div>
+<p style="margin: 0; font-size: 14px; color: #4A5A57">Requires macOS 13 or later · Apple silicon and Intel · Signed and notarized by Machinery Software LLC</p>
+</div>
+
+<div style="background: #FFFFFF; border: 1px solid #DDE3E1; border-radius: 14px; overflow: hidden; box-shadow: 0 20px 50px rgba(20,35,33,0.12)" role="img" aria-label="Mailviewer window showing a mailbox list and an open message with the inspector">
+<div style="display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #E7ECEA; background: #F3F5F4">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #EC6A5E"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #F4BF4F"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #61C554"></span>
+<span style="flex: 1; text-align: center; font-size: 13px; font-weight: 600; color: #4A5A57">claims-2026.mbox</span>
+</div>
+<div class="mv-shot" style="min-height: 360px; font-size: 12px">
+<div class="mv-shot-side" style="background: #F3F5F4; border-right: 1px solid #E7ECEA; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 11px; font-weight: 600; color: #6B7A77; text-transform: uppercase">Sources</div>
+<div style="background: #DDEFEB; border-radius: 6px; padding: 6px 8px; font-weight: 600">claims-2026.mbox</div>
+<div style="padding: 6px 8px">Takeout</div>
+<div style="padding: 6px 8px">Inbox.mbox</div>
+<div style="padding: 6px 8px">site-photos.eml</div>
+</div>
+<div style="border-right: 1px solid #E7ECEA; display: flex; flex-direction: column">
+<div style="padding: 10px 12px; border-bottom: 1px solid #E7ECEA; background: #DDEFEB">
+<div style="display: flex; justify-content: space-between; font-weight: 600"><span>field@example.com</span><span style="color: #6B7A77; font-weight: 400">11:02</span></div>
+<div style="font-weight: 600; padding-top: 2px">Site photographs</div>
+<div style="color: #6B7A77; padding-top: 2px">Following the storm event of 12 March, the adjuster attended…</div>
+</div>
+<div style="padding: 10px 12px; border-bottom: 1px solid #E7ECEA">
+<div style="display: flex; justify-content: space-between; font-weight: 600"><span>quantity@example.com</span><span style="color: #6B7A77; font-weight: 400">Mon</span></div>
+<div style="padding-top: 2px">Schedule of loss</div>
+<div style="color: #6B7A77; padding-top: 2px">Attached is the revised schedule with materials and labor…</div>
+</div>
+<div style="padding: 10px 12px; border-bottom: 1px solid #E7ECEA">
+<div style="display: flex; justify-content: space-between; font-weight: 600"><span>broker@example.com</span><span style="color: #6B7A77; font-weight: 400">Fri</span></div>
+<div style="padding-top: 2px">Renewal documents</div>
+<div style="color: #6B7A77; padding-top: 2px">Please find the signed renewal and the updated…</div>
+</div>
+</div>
+<div style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="background: #F3F5F4; border: 1px solid #E2E8E6; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 10px; font-weight: 700; color: #4A5A57; letter-spacing: 0.04em">MESSAGE INSPECTOR</div>
+<div><span style="color: #6B7A77">Route:</span> 3 hops recorded</div>
+<div><span style="color: #6B7A77">Contains:</span> 6 inline images · 0 links</div>
+</div>
+<div style="font-size: 15px; font-weight: 700">Site photographs</div>
+<div style="color: #4A5A57">From field@example.com · To claims@example.com</div>
+<div style="height: 64px; border-radius: 6px; background: #E4ECE9"></div>
+<div style="height: 8px; border-radius: 4px; background: #E7ECEA; width: 92%"></div>
+<div style="height: 8px; border-radius: 4px; background: #E7ECEA; width: 80%"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="background: #FFFFFF; border-top: 1px solid #DDE3E1; border-bottom: 1px solid #DDE3E1">
+<div class="mv-wrap" style="padding-top: 72px; padding-bottom: 72px; display: flex; flex-direction: column; gap: 40px">
+<h2 style="margin: 0; font-size: 34px; letter-spacing: -0.01em; max-width: 720px">Built for people who get email as files: claims, legal and IT teams.</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0F6B5C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+<h3 style="margin: 0; font-size: 19px">Space bar previews</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">Select a .msg in Finder and press Space. Inline images, tables and headers render, with the inspector one click away.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0F6B5C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.5-4.5"></path></svg>
+<h3 style="margin: 0; font-size: 19px">An inspector that doesn't guess</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">See the route a message recorded, its sender authentication results, attachments and links. It reports what the file says; it never issues a verdict.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0F6B5C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"></path></svg>
+<h3 style="margin: 0; font-size: 19px">Whole mailboxes</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">Drop in an .mbox, an Apple Mail mailbox, a folder of messages or a Google Takeout export. Search across all of it, with previews on every row.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0F6B5C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+<h3 style="margin: 0; font-size: 19px">Offline by design</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">Sandboxed, with parsing in its own isolated process. Mail never leaves the Mac, and there's no telemetry. Remote images never load.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="mv-wrap" style="padding-top: 72px; padding-bottom: 72px">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #0F6B5C">For IT admins</p>
+<h2 style="margin: 0; font-size: 34px; letter-spacing: -0.01em">Deploy it like the rest of your fleet.</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.5; color: #4A5A57">A signed, notarized installer package, settings you can lock with a configuration profile, and a license key that ships in the same profile. Nothing to activate online.</p>
+<a href="https://updates.mailviewer.app/admin/" style="font-weight: 600; font-size: 16px">Read the admin guide</a>
+</div>
+<ul style="margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; font-size: 16px">
+<li style="background: #FFFFFF; border: 1px solid #DDE3E1; border-radius: 10px; padding: 14px 16px"><strong>MDM-ready .pkg</strong><br><span style="color: #4A5A57">Jamf, Kandji, Intune or any MDM. Installs to /Applications.</span></li>
+<li style="background: #FFFFFF; border: 1px solid #DDE3E1; border-radius: 10px; padding: 14px 16px"><strong>Patch your way</strong><br><span style="color: #4A5A57">Installomator and a stable download URL that always points at the newest release.</span></li>
+<li style="background: #FFFFFF; border: 1px solid #DDE3E1; border-radius: 10px; padding: 14px 16px"><strong>Managed settings</strong><br><span style="color: #4A5A57">Disable link opening, choose the Space bar preview and set the license by profile.</span></li>
+<li style="background: #FFFFFF; border: 1px solid #DDE3E1; border-radius: 10px; padding: 14px 16px"><strong>Clean uninstall</strong><br><span style="color: #4A5A57">One script removes the app, its helper and every user's data.</span></li>
+</ul>
+</div>
+</section>
+
+<section id="pricing" style="background: #FFFFFF; border-top: 1px solid #DDE3E1; border-bottom: 1px solid #DDE3E1">
+<div class="mv-wrap" style="padding-top: 72px; padding-bottom: 80px; display: flex; flex-direction: column; gap: 36px">
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 680px">
+<h2 style="margin: 0; font-size: 38px; letter-spacing: -0.01em">Pricing</h2>
+<p style="margin: 0; font-size: 17px; line-height: 1.5; color: #4A5A57">One price and one license key per organization, by how many Macs you cover. Every business plan includes the installer package, managed settings, support by email and security notices within 72 hours.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+<div style="border: 1px solid #DDE3E1; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #F7F8F6">
+<h3 style="margin: 0; font-size: 18px">Personal</h3>
+<div><span style="font-size: 36px; font-weight: 700">$4.99</span><span style="color: #4A5A57"> one-time</span></div>
+<p style="margin: 0; color: #4A5A57; line-height: 1.5">For one person on their own Macs.</p>
+<p style="margin-top: auto; margin-bottom: 0; text-align: center; border: 1px dashed #C9D2CF; border-radius: 10px; padding: 12px; color: #4A5A57; font-weight: 600">Coming to the Mac App Store</p>
+</div>
+<div style="border: 1px solid #DDE3E1; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 18px">Team</h3>
+<div><span style="font-size: 36px; font-weight: 700">$299</span><span style="color: #4A5A57"> / year</span></div>
+<p style="margin: 0; color: #4A5A57; line-height: 1.5">Includes 25 Macs. Each Mac after that is $12 a year. One license key for your organization, delivered as a configuration profile.</p>
+<a href="mailto:sales@mailviewer.app?subject=Mailviewer%20Team%20plan" style="margin-top: auto; text-align: center; background: #0F7A69; color: #FFFFFF; border-radius: 10px; padding: 12px; text-decoration: none; font-weight: 600; min-height: 44px; box-sizing: border-box">Email sales@mailviewer.app to buy</a>
+</div>
+<div style="border: 2px solid #0F7A69; border-radius: 14px; padding: 23px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><h3 style="margin: 0; font-size: 18px">Business</h3><span style="font-size: 12px; font-weight: 700; color: #0F6B5C; background: #DDEFEB; border-radius: 999px; padding: 4px 10px">Most chosen</span></div>
+<div><span style="font-size: 36px; font-weight: 700">$999</span><span style="color: #4A5A57"> / year</span></div>
+<p style="margin: 0; color: #4A5A57; line-height: 1.5">Includes 100 Macs. Each Mac after that is $9 a year. One license key for your organization, delivered as a configuration profile. Invoices and purchase orders available.</p>
+<a href="mailto:sales@mailviewer.app?subject=Mailviewer%20Business%20plan" style="margin-top: auto; text-align: center; background: #0F7A69; color: #FFFFFF; border-radius: 10px; padding: 12px; text-decoration: none; font-weight: 600; min-height: 44px; box-sizing: border-box">Email sales@mailviewer.app to buy</a>
+</div>
+<div style="border: 1px solid #DDE3E1; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 14px; background: #142321; color: #FFFFFF">
+<h3 style="margin: 0; font-size: 18px">Site license</h3>
+<div><span style="font-size: 36px; font-weight: 700">From $6,000</span><span style="color: #C9D6D3"> / year</span></div>
+<p style="margin: 0; color: #C9D6D3; line-height: 1.5">Every Mac in your organization on a single license key, with a master services agreement and multi-year terms.</p>
+<a href="mailto:sales@mailviewer.app?subject=Mailviewer%20Site%20license" style="margin-top: auto; text-align: center; background: #FFFFFF; color: #142321; border-radius: 10px; padding: 12px; text-decoration: none; font-weight: 600; min-height: 44px; box-sizing: border-box">Talk to us</a>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; padding-top: 8px">
+<h3 style="margin: 0; font-size: 24px">Why not a $4.99 app?</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57; max-width: 680px">Consumer viewers are built for one person; forensic tools are built for Windows. A business plan is for a fleet of Macs that IT deploys, configures and patches.</p>
+<div style="overflow-x: auto; border: 1px solid #DDE3E1; border-radius: 12px">
+<table style="border-collapse: collapse; width: 100%; min-width: 640px; font-size: 15px; line-height: 1.4">
+<thead><tr><td style="padding: 12px 14px; border-bottom: 1px solid #DDE3E1"></td><th scope="col" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Consumer viewer apps</th><th scope="col" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Windows forensic tools</th><th scope="col" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Mailviewer for Mac</th></tr></thead>
+<tbody><tr><th scope="row" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Opens .eml, .msg, .mbox and Takeout on a Mac</th><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Some formats</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Windows only</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top"><strong>All four</strong></td></tr><tr><th scope="row" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Deploys and configures through MDM</th><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">No</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Varies</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top"><strong>Yes: signed package, profile, Installomator</strong></td></tr><tr><th scope="row" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Email never leaves the Mac; no telemetry</th><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Not stated</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Varies</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top"><strong>Yes, verifiable in the app's entitlements</strong></td></tr><tr><th scope="row" style="text-align: left; padding: 12px 14px; border-bottom: 1px solid #DDE3E1; font-size: 15px">Support terms and security notices in writing</th><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">No</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top">Yes, per seat</td><td style="padding: 12px 14px; border-bottom: 1px solid #E7ECEA; vertical-align: top"><strong>Yes, per organization</strong></td></tr></tbody></table></div>
+</div>
+<p style="margin: 0; font-size: 14px; color: #4A5A57">Prices in USD. Team and Business are invoiced; email us and we send the invoice and your license key. Not sure yet? Every format the Mac app opens can be tried free in the <a href="/">web app</a>.</p>
+</div>
+</section>
+
+<section class="mv-wrap" style="padding-top: 72px; padding-bottom: 72px">
+<h2 style="margin: 0 0 28px 0; font-size: 34px; letter-spacing: -0.01em">Questions</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px 48px">
+<div><h3 style="margin: 0 0 8px 0; font-size: 18px">Does Mailviewer upload my mail?</h3><p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">No. Mailviewer for Mac makes no network connections at all: messages are read in a separate sandboxed process, nothing is uploaded, and it never checks for updates. Your IT team updates it with the tools it already uses.</p></div>
+<div><h3 style="margin: 0 0 8px 0; font-size: 18px">How is the license delivered?</h3><p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">One key covers your organization: the key names your organization and, for Team and Business, how many Macs the plan covers. Push it to every Mac in one configuration profile, or paste it once into Settings. Replacing, loaning or re-imaging a Mac needs nothing from you or from us. Keys are checked offline.</p></div>
+<div><h3 style="margin: 0 0 8px 0; font-size: 18px">Can I try it first?</h3><p style="margin: 0; font-size: 16px; line-height: 1.5; color: #4A5A57">Yes. The free web app at mailviewer.app opens the same formats in your browser, and nothing leaves your computer there either.</p></div>
+</div>
+</section>
+
+<footer style="border-top: 1px solid #DDE3E1; background: #FFFFFF">
+<div class="mv-wrap" style="padding-top: 28px; padding-bottom: 28px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 14px; color: #4A5A57">
+<span>© 2026 Machinery Software LLC</span>
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<a href="/#/privacy">Privacy</a>
+<a href="https://github.com/machinery-software/mailviewer/security">Security</a>
+<a href="https://updates.mailviewer.app/">Downloads</a>
+<a href="mailto:support@mailviewer.app">Contact</a>
+</div>
+</div>
+</footer>
+
+</div>
+</body>
+</html>
