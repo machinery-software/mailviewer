@@ -52,12 +52,19 @@ fi
 #   nothing is requested unless the reader clicks, and no message data is in the
 #   URL.
 #
+# updates.mailviewer.app
+#   <a href> targets on the Mac purchase page (public/mac/index.html, MAC-715):
+#   the downloads page and the admin guide on the Mac release host. Link
+#   targets only, like the two above; src/__tests__/mac-page.test.ts refuses any
+#   subresource from another origin on that page.
+#
 ALLOWED_HOSTS=(
   "www.w3.org"
   "react.dev"
   "example.com"
   "machinery.software"
   "github.com"
+  "updates.mailviewer.app"
 )
 # ---------------------------------------------------------------------------
 
