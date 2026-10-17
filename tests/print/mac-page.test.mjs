@@ -14,15 +14,12 @@ import { productionHeaders } from "./server.mjs";
  *   would see one.
  * - Every link resolves: an anchor on the page, a file or route in dist/, an
  *   https URL or an email.
- * - --ink3 (#6F7D7A, 4.41:1 on the page background, short of AA) colours only
- *   the footer and fine print of at most 14px.
  * - At phone width (390px) the page does not scroll sideways.
  */
 
 const ENGINES = [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]];
 const DIST = join(ROOT, "dist");
 const BUILT = readFileSync(join(DIST, "mac/index.html"), "utf8");
-const INK3 = "rgb(111, 125, 122)";
 
 /** The hash routes the app answers, read from App.tsx's currentRoute(). */
 const APP_ROUTES = [...readFileSync(join(ROOT, "src/App.tsx"), "utf8").matchAll(/h === "([a-z]+)"/g)].map((m) => m[1]);
@@ -126,26 +123,6 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
     await page.goto(`${server.origin}/mac/planted`, { waitUntil: "load" });
     await expect.poll(problems).not.toEqual([]);
     expect(await page.title()).not.toBe("ran");
-    await page.close();
-  });
-
-  it("uses --ink3 only for the footer and fine print of at most 14px", async () => {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    await page.goto(`${server.origin}/mac/`);
-    const ink3 = await page.evaluate((INK3) => {
-      const out = [];
-      for (const el of document.querySelectorAll("body *")) {
-        const own = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()).map((n) => n.textContent.trim());
-        if (!own.length) continue;
-        const cs = getComputedStyle(el);
-        if (cs.color !== INK3) continue;
-        out.push({ text: own.join(" ").slice(0, 40), px: parseFloat(cs.fontSize), footer: !!el.closest("footer") });
-      }
-      return out;
-    }, INK3);
-    expect(ink3.length).toBeGreaterThan(0);
-    for (const t of ink3) expect(t.px, t.text).toBeLessThanOrEqual(14);
-    expect(ink3.filter((t) => t.footer).map((t) => t.text)).toEqual(["© 2026 Machinery Software LLC"]);
     await page.close();
   });
 

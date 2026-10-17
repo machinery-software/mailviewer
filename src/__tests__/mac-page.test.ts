@@ -7,12 +7,13 @@ import { MAC_PURCHASE_LINKS } from "../lib/mac-purchase-links";
  *
  * The page is the design of record (~/Downloads/mac-index.html, 17 October),
  * ported byte for byte apart from the Terms link, which is an email until a
- * terms page exists (MAC-740). It is static under the site's CSP: no script, nothing
- * from another origin. Team, Business and Site license buy through Stripe
+ * terms page exists (MAC-740), and --ink3, which is #788683 rather than
+ * #6F7D7A so that it passes AA (David, 17 October; the canvas has it too).
+ * It is static under the site's CSP: no script, nothing from another origin. Team, Business and Site license buy through Stripe
  * Payment Links, recorded in src/lib/mac-purchase-links.ts.
  *
- * The real-browser half (the CSP, every link against dist/, the size of the
- * --ink3 text) is tests/print/mac-page.test.mjs.
+ * The real-browser half (the CSP, every link against dist/) is
+ * tests/print/mac-page.test.mjs.
  */
 const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
 const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
@@ -91,30 +92,18 @@ describe("the Mac purchase page's contrast (WCAG AA, 4.5:1 for normal text)", ()
   );
 
   it("reads its palette from the page's CSS variables", () => {
-    expect(vars).toMatchObject({ bg: "#0B1211", card: "#131D1B", ink: "#ECF2F0", ink2: "#A7B5B1", ink3: "#6F7D7A" });
+    expect(vars).toMatchObject({ bg: "#0B1211", card: "#131D1B", ink: "#ECF2F0", ink2: "#A7B5B1", ink3: "#788683" });
   });
 
-  it("passes AA with --ink and --ink2 on both backgrounds", () => {
+  it("passes AA with --ink, --ink2 and --ink3 on both backgrounds", () => {
     for (const bg of [vars.bg, vars.card]) {
-      expect(contrast(vars.ink, bg)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(vars.ink2, bg)).toBeGreaterThanOrEqual(4.5);
+      for (const ink of [vars.ink, vars.ink2, vars.ink3]) expect(contrast(ink, bg), `${ink} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     }
     expect(contrast(vars.ink, vars.bg).toFixed(2)).toBe("16.71");
     expect(contrast(vars.ink, vars.card).toFixed(2)).toBe("15.19");
     expect(contrast(vars.ink2, vars.bg).toFixed(2)).toBe("8.92");
     expect(contrast(vars.ink2, vars.card).toFixed(2)).toBe("8.11");
-  });
-
-  it("knows --ink3 fails AA, so keeps it to the footer and fine print", () => {
-    expect(contrast(vars.ink3, vars.bg).toFixed(2)).toBe("4.41");
-    expect(contrast(vars.ink3, vars.card).toFixed(2)).toBe("4.01");
-    // Used in exactly two places: the .faint class (fine print, at most 14px:
-    // tests/print/mac-page.test.mjs measures it) and the footer.
-    expect([...style.matchAll(/([^{}]+)\{[^}]*var\(--ink3\)/g)].map((m) => m[1].trim())).toEqual([".faint"]);
-    const inline = [...markup.matchAll(/<([a-z]+)[^>]*style="[^"]*var\(--ink3\)[^"]*"/g)];
-    expect(inline).toHaveLength(1);
-    expect(markup.slice(markup.lastIndexOf("<footer", inline[0].index), inline[0].index)).toMatch(/^<footer[^]*$/);
-    expect(markup.indexOf("</footer>")).toBeGreaterThan(inline[0].index!);
-    expect(html.match(/#6F7D7A/gi)).toHaveLength(1);
+    expect(contrast(vars.ink3, vars.bg).toFixed(2)).toBe("4.99");
+    expect(contrast(vars.ink3, vars.card).toFixed(2)).toBe("4.54");
   });
 });
