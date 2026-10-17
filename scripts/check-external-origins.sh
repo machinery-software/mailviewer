@@ -58,6 +58,11 @@ fi
 #   targets only, like the two above; src/__tests__/mac-page.test.ts refuses any
 #   subresource from another origin on that page.
 #
+# buy.stripe.com
+#   The Buy Team, Buy Business and Buy Site license buttons on the Mac purchase
+#   page: Stripe Payment Links (src/lib/mac-purchase-links.ts). Link targets
+#   only, opened when the reader clicks; nothing is loaded from Stripe.
+#
 ALLOWED_HOSTS=(
   "www.w3.org"
   "react.dev"
@@ -65,6 +70,7 @@ ALLOWED_HOSTS=(
   "machinery.software"
   "github.com"
   "updates.mailviewer.app"
+  "buy.stripe.com"
 )
 # ---------------------------------------------------------------------------
 
