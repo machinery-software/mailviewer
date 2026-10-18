@@ -9,6 +9,9 @@ import { MAC_PURCHASE_LINKS } from "../lib/mac-purchase-links";
  * ported byte for byte apart from the Terms link, which is an email until a
  * terms page exists (MAC-740), and --ink3, which is #788683 rather than
  * #6F7D7A so that it passes AA (David, 17 October; the canvas has it too).
+ * Also David's, 17 October: the Personal button is a disabled "Coming to the
+ * Mac App Store" (the port file was wrong there), the requirements line names
+ * macOS 13, and the logo links to /.
  * It is static under the site's CSP: no script, nothing from another origin. Team, Business and Site license buy through Stripe
  * Payment Links, recorded in src/lib/mac-purchase-links.ts.
  *
@@ -54,11 +57,25 @@ describe("the Mac purchase page", () => {
 
   it("links only to anchors on the page, https URLs, email and the site's own paths", () => {
     for (const href of hrefs) {
-      // "#" is the top of the page (the design's logo and Personal button).
-      if (href.startsWith("#")) href === "#" || expect(ids, href).toContain(href.slice(1));
+      if (href.startsWith("#")) expect(ids, href).toContain(href.slice(1));
       else if (href.startsWith("/")) expect(href).toMatch(/^\/(?!\/)/);
       else expect(href).toMatch(/^(https:\/\/[a-z0-9.-]+\/|mailto:[a-z]+@mailviewer\.app$)/);
     }
+  });
+
+  it("offers Personal as a disabled 'Coming to the Mac App Store', with nowhere to go", () => {
+    expect(card("Personal")).toContain('<a class="btn btn-secondary" aria-disabled="true">Coming to the Mac App Store</a>');
+    expect(card("Personal")).not.toMatch(/href=/);
+  });
+
+  it("names what it runs on, with no placeholder left", () => {
+    expect(markup).toContain("Requires macOS 13 or later · Apple silicon and Intel · Signed and notarized by Machinery Software LLC");
+    expect(markup).not.toMatch(/\[[A-Z0-9 .-]+\]/);
+  });
+
+  it("links the logo to the web app's home", () => {
+    expect(markup).toMatch(/<a href="\/" style="display: flex;[^>]*>\s*<svg/);
+    expect(hrefs).not.toContain("#");
   });
 
   it("links Terms to support by email until a terms page exists", () => {
