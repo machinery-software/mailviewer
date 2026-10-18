@@ -126,6 +126,32 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
     await page.close();
   });
 
+  it("shows the disabled Personal button as disabled: faded, no hover, no press, never reached by Tab", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${server.origin}/mac/`);
+    const button = page.locator('.btn[aria-disabled="true"]', { hasText: "Coming to the Mac App Store" });
+    const look = () => button.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { opacity: s.opacity, cursor: s.cursor, boxShadow: s.boxShadow, filter: s.filter, transform: s.transform, background: s.backgroundImage, pointer: s.pointerEvents };
+    });
+    const before = await look();
+    expect(before).toMatchObject({ opacity: "0.55", cursor: "default", boxShadow: "none", filter: "none", transform: "none", pointer: "none" });
+    const box = await button.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    expect(await look(), "hovering or pressing it changes nothing").toEqual(before);
+    await page.mouse.up();
+    expect(await button.getAttribute("tabindex")).toBe("-1");
+    expect(await button.getAttribute("href")).toBeNull();
+    // Tab through every focusable element on the page: the button is never focused.
+    const stops = await page.evaluate(() => document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]:not([tabindex='-1'])").length);
+    for (let i = 0; i <= stops; i++) {
+      await page.keyboard.press(browser.browserType().name() === "webkit" ? "Alt+Tab" : "Tab");
+      expect(await button.evaluate((el) => el === document.activeElement)).toBe(false);
+    }
+    await page.close();
+  });
+
   it("does not scroll sideways at 390px", async () => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.goto(`${server.origin}/mac/`);

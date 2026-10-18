@@ -29,6 +29,7 @@ body{margin:0;background:#0B1211;color-scheme:dark}
 .btn-light{color:#0B1211!important;background:linear-gradient(180deg,#FFFFFF,#DCE6E3);border:1px solid rgba(255,255,255,0.6);box-shadow:inset 0 1px 0 #fff,0 10px 26px rgba(0,0,0,0.45)}
 .btn-light:hover{filter:brightness(1.03);color:#0B1211!important}
 .btn-sm{min-height:40px;padding:0 16px;font-size:15px;border-radius:9px}
+.btn[aria-disabled="true"]{opacity:.55;cursor:default;pointer-events:none;box-shadow:none;filter:none;transform:none}
 .card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 0 rgba(255,255,255,0.04) inset,0 18px 40px rgba(0,0,0,0.35)}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;letter-spacing:.02em;color:#8FEBD6;background:rgba(63,208,179,0.10);border:1px solid rgba(63,208,179,0.25);border-radius:999px;padding:5px 10px}
 .eyebrow{margin:0;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
@@ -214,7 +215,7 @@ Mailviewer
 <li>Updates from the App Store</li>
 <li>No key, no profile</li>
 </ul>
-<a class="btn btn-secondary" aria-disabled="true">Coming to the Mac App Store</a>
+<a class="btn btn-secondary" aria-disabled="true" tabindex="-1">Coming to the Mac App Store</a>
 </div>
 <div class="plan">
 <div class="plan-head"><h3>Team</h3><p class="muted plan-sub">Up to 25 Macs, then $12 a Mac.</p></div>

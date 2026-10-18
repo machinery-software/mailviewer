@@ -64,7 +64,7 @@ describe("the Mac purchase page", () => {
   });
 
   it("offers Personal as a disabled 'Coming to the Mac App Store', with nowhere to go", () => {
-    expect(card("Personal")).toContain('<a class="btn btn-secondary" aria-disabled="true">Coming to the Mac App Store</a>');
+    expect(card("Personal")).toContain('<a class="btn btn-secondary" aria-disabled="true" tabindex="-1">Coming to the Mac App Store</a>');
     expect(card("Personal")).not.toMatch(/href=/);
   });
 
