@@ -40,6 +40,10 @@ export async function startServer(distDir, headersFile) {
     const url = new URL(req.url, "http://localhost");
     let file = join(root, url.pathname);
     if (!file.startsWith(root)) return res.writeHead(403).end();
+    // A folder is served by its index.html, as Cloudflare serves /mac and
+    // /mac/ from dist/mac/index.html. Anything else that is missing gets the
+    // app (not_found_handling: single-page-application).
+    if (existsSync(join(file, "index.html"))) file = join(file, "index.html");
     if (!existsSync(file) || url.pathname === "/") file = join(root, "index.html");
     try {
       const body = await readFile(file);
