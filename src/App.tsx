@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Help from "./ui/Help";
 import Landing from "./ui/Landing";
 import Privacy from "./ui/Privacy";
 import Report from "./ui/ReportProblem";
@@ -7,7 +8,7 @@ import Viewer from "./ui/Viewer";
 import { Logo } from "./ui/Logo";
 import { SOURCE_URL } from "./config";
 
-type Route = "home" | "privacy" | "verify" | "open" | "report";
+type Route = "home" | "privacy" | "verify" | "open" | "report" | "help";
 
 function currentRoute(): Route {
   const h = location.hash.replace(/^#\/?/, "");
@@ -15,6 +16,7 @@ function currentRoute(): Route {
   if (h === "verify") return "verify";
   if (h === "open") return "open";
   if (h === "report") return "report";
+  if (h === "help") return "help";
   return "home";
 }
 
@@ -79,6 +81,7 @@ export default function App() {
       {route === "verify" && <Verify />}
       {route === "open" && <Viewer />}
       {route === "report" && <Report />}
+      {route === "help" && <Help />}
     </div>
   );
 }

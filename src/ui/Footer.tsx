@@ -12,6 +12,7 @@ export function Footer({ note }: { note?: ReactNode }) {
       <div className="footer-inner">
         {note && <span className="footer-note">{note}</span>}
         <nav className="footer-links">
+          <a href="#/help">Help</a>
           <a href="#/privacy">Privacy</a>
           <a href="#/verify">Verify</a>
           <a href="#/report">Report a problem</a>
