@@ -183,7 +183,7 @@ export default function Verify() {
         </div>
 
         <div className="callout warn">
-          <strong style={{ color: "var(--amber)" }}>One honest caveat.</strong> Verifying the
+          <strong>One honest caveat.</strong> Verifying the
           page today doesn't verify it forever — we could ship different code tomorrow. That's
           true of every website. Your protections are that the source is public, the site is
           static with no server-side logic, and the check above takes ninety seconds and can be

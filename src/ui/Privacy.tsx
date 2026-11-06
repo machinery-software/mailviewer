@@ -76,7 +76,7 @@ export default function Privacy() {
         </div>
 
         <div className="callout warn">
-          <strong style={{ color: "var(--amber)" }}>One honest caveat.</strong> Checking the
+          <strong>One honest caveat.</strong> Checking the
           page today doesn't guarantee it forever — any website can ship different code
           tomorrow. Your protections are that the{" "}
           <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer">

@@ -9,6 +9,14 @@ export const COMPANY_URL = "https://machinery.software";
 export const SUPPORT_EMAIL = "support@mailviewer.app";
 export const ISSUES_URL = `${SOURCE_URL}/issues`;
 
+/** The repository's security policy, linked from every footer like the Mac pages' footers. */
+export const SECURITY_URL = `${SOURCE_URL}/security`;
+
+/** Licensing, invoices and purchase orders for the Mac app (the #/contact page). */
+export const SALES_EMAIL = "sales@mailviewer.app";
+/** Vulnerability reports (the #/contact page). */
+export const SECURITY_EMAIL = "security@mailviewer.app";
+
 /**
  * Which build this is. Stamped in by Vite at build time so a report can be tied
  * to an exact bundle -- the app cannot ask a server what version it is running,
