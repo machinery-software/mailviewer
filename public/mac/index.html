@@ -39,7 +39,31 @@ body{margin:0;background:#0B1211;color-scheme:dark}
 .plan.hot{border-color:rgba(63,208,179,0.55);box-shadow:0 0 0 1px rgba(63,208,179,0.35),0 1px 0 rgba(255,255,255,0.05) inset,0 24px 56px rgba(63,208,179,0.14),0 18px 40px rgba(0,0,0,0.4)}
 .plan h3{margin:0;font-size:17px;font-weight:600;color:var(--ink)}
 .price{font-size:38px;font-weight:700;letter-spacing:-0.02em}
-.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;align-items:stretch}
+.plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:stretch}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width: 760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width: 1000px){.plans,.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width: 560px){.plans,.grid4{grid-template-columns:minmax(0,1fr)}}
+/* The Site license term: three radios, one checked, no script. The inputs are
+   siblings of the price blocks and the Buy links, so a checked radio shows its
+   own term through the sibling combinator and hides the others. Without CSS
+   all three show and the 1-year link is the first; without JavaScript nothing
+   changes, because nothing here uses any. */
+.term{display:flex;flex-direction:column;gap:14px;flex:1;min-width:0;margin:0;padding:0;border:0}
+.term legend,.term input{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.term input{opacity:0}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:10px;background:rgba(0,0,0,0.28);border:1px solid rgba(120,160,220,0.25)}
+.seg label{display:flex;align-items:center;justify-content:center;min-height:34px;border-radius:7px;font-size:14px;font-weight:600;color:#AFC0D6;cursor:pointer;user-select:none;-webkit-user-select:none;transition:background .12s ease,color .12s ease}
+.seg label:hover{color:var(--ink)}
+#site-1y:checked~.seg label[for="site-1y"],#site-2y:checked~.seg label[for="site-2y"],#site-3y:checked~.seg label[for="site-3y"]{background:linear-gradient(180deg,rgba(255,255,255,0.16),rgba(255,255,255,0.08));color:var(--ink);box-shadow:inset 0 1px 0 rgba(255,255,255,0.14),0 1px 2px rgba(0,0,0,0.4)}
+#site-1y:focus-visible~.seg label[for="site-1y"],#site-2y:focus-visible~.seg label[for="site-2y"],#site-3y:focus-visible~.seg label[for="site-3y"]{outline:3px solid var(--accent);outline-offset:2px}
+.term .t1,.term .t2,.term .t3{display:none}
+#site-1y:checked~div.t1,#site-2y:checked~div.t2,#site-3y:checked~div.t3{display:block}
+#site-1y:checked~a.t1,#site-2y:checked~a.t2,#site-3y:checked~a.t3{display:inline-flex}
+.term-total{margin:6px 0 0;font-size:14px;line-height:1.45;color:#AFC0D6}
+/* On a touch screen every target is at least 44px tall: the segments and the header's text links (Fitts). */
+@media (pointer: coarse){.seg label{min-height:44px}header nav a{padding:10px 0}}
 .plan-head{display:flex;flex-direction:column;gap:4px}.plan-sub{margin:0;font-size:14px;line-height:1.45}
 .plan .btn{width:100%;margin-top:auto}
 .feats{margin:4px 0 20px 0;padding:18px 0 0 0;list-style:none;display:grid;gap:11px;border-top:1px solid var(--line);font-size:14.5px;line-height:1.45;color:var(--ink2)}
@@ -74,7 +98,7 @@ Mailviewer
 </a>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 26px; font-size: 15px">
 <a href="/" class="muted" style="color: var(--ink2)">Web app</a>
-<a href="/mac" style="color: var(--ink); font-weight: 600" aria-current="page">Mac</a>
+<a href="/mac" style="color: var(--ink); font-weight: 600" aria-current="page">Mac app</a>
 <a href="https://updates.mailviewer.app/" style="color: var(--ink2)">Downloads</a>
 <a href="https://updates.mailviewer.app/admin/" style="color: var(--ink2)">For IT admins</a>
 <a href="#pricing" class="btn btn-primary btn-sm">Buy</a>
@@ -91,10 +115,13 @@ Mailviewer
 <span class="chip"><span style="width: 6px; height: 6px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent)"></span>Mailviewer for Mac</span>
 <h1 style="margin: 0; font-size: 56px; line-height: 1.04; letter-spacing: -0.025em; font-weight: 700">Open any email file on your Mac. <span style="color: var(--ink2)">Nothing leaves it.</span></h1>
 <p class="muted" style="margin: 0; font-size: 19px; line-height: 1.55; max-width: 520px">Outlook .msg and .eml messages, .mbox files, Apple Mail mailboxes and Google Takeout exports, in a window or straight from the Space bar. No mail account, no upload, no tracking.</p>
-<div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 6px">
-<a href="#pricing" class="btn btn-primary">See plans</a>
-<a href="/" class="btn btn-secondary">Try the free web app</a>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding-top: 6px">
+<a href="https://updates.mailviewer.app/latest/Mailviewer.pkg" class="btn btn-primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06201B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"></path><path d="M7 11l5 5 5-5"></path><path d="M4 19h16"></path></svg>Download for Mac</a>
+<a href="#pricing" class="btn btn-secondary">See plans</a>
+<a href="/" style="font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; min-height: 48px">Try the free web app <span aria-hidden="true">→</span></a>
 </div>
+<!-- The version is written here by hand. public/ is copied into the build untouched and the build never reaches the network (DEPLOYMENT.md §5), so it is not read from https://updates.mailviewer.app/latest.json. Change it with each Mac release, together with MAC_APP_VERSION in src/lib/mac-purchase-links.ts; the unit test holds the two equal. -->
+<p class="faint" style="margin: 0; font-size: 13.5px">Version 1.0.0, free to download. A license key from your plan unlocks it for your organization.</p>
 <p class="faint" style="margin: 0; font-size: 13.5px">Requires macOS 13 or later · Apple silicon and Intel · Signed and notarized by Machinery Software LLC</p>
 </div>
 
@@ -154,7 +181,7 @@ Mailviewer
 <p class="eyebrow">What it does</p>
 <h2 style="margin: 0; font-size: 36px; letter-spacing: -0.02em; max-width: 760px; line-height: 1.15">Built for people who get email as files: claims, legal and IT teams.</h2>
 </div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px">
+<div class="grid4">
 <div class="feature">
 <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8FEBD6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></div>
 <h3 style="margin: 0; font-size: 18px; font-weight: 600">Space bar previews</h3>
@@ -180,7 +207,7 @@ Mailviewer
 </section>
 
 <section class="mv-wrap" style="padding-top: 88px; padding-bottom: 88px">
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 48px; align-items: start">
+<div class="grid2" style="gap: 48px; align-items: start">
 <div style="display: flex; flex-direction: column; gap: 16px">
 <p class="eyebrow">For IT admins</p>
 <h2 style="margin: 0; font-size: 36px; letter-spacing: -0.02em; line-height: 1.15">Deploy it like the rest of your fleet.</h2>
@@ -244,7 +271,19 @@ Mailviewer
 </div>
 <div class="plan site">
 <div class="plan-head"><h3>Site license</h3><p class="plan-sub" style="color: #AFC0D6">Every Mac you own, no counting. Buy it like any other plan.</p></div>
-<div><span class="price">From $6,000</span><span style="color: #AFC0D6"> / year</span></div>
+<fieldset class="term">
+<legend>License term</legend>
+<input type="radio" name="site-term" id="site-1y" value="1" checked>
+<input type="radio" name="site-term" id="site-2y" value="2">
+<input type="radio" name="site-term" id="site-3y" value="3">
+<div class="seg">
+<label for="site-1y">1 year</label>
+<label for="site-2y">2 years</label>
+<label for="site-3y">3 years</label>
+</div>
+<div class="t1"><span class="price">$6,000</span><span style="color: #AFC0D6"> / year</span><p class="term-total">$6,000 billed yearly</p></div>
+<div class="t2"><span class="price">$5,700</span><span style="color: #AFC0D6"> per year</span><p class="term-total">$11,400 billed once for 2 years</p></div>
+<div class="t3"><span class="price">$5,400</span><span style="color: #AFC0D6"> per year</span><p class="term-total">$16,200 billed once for 3 years</p></div>
 <ul class="feats site-feats">
 <li>Everything in Business</li>
 <li>Unlimited Macs, no true-ups</li>
@@ -252,24 +291,28 @@ Mailviewer
 <li>Multi-year terms, 5% and 10% off</li>
 <li>Security and continuity terms in writing</li>
 </ul>
-<a href="https://buy.stripe.com/eVqcN71Uc1GK94p3pw3Nm09" class="btn btn-light">Buy Site license</a>
+<a href="https://buy.stripe.com/eVqcN71Uc1GK94p3pw3Nm09" class="btn btn-light t1">Buy Site license</a>
+<a href="https://buy.stripe.com/14AeVfeGYetweoJf8e3Nm0a" class="btn btn-light t2">Buy Site license</a>
+<a href="https://buy.stripe.com/4gM6oJgP6dpsa8tf8e3Nm0b" class="btn btn-light t3">Buy Site license</a>
+</fieldset>
 </div>
 </div>
-<div class="card" style="padding: 22px 26px; border-radius: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px 40px">
+<p class="faint" style="margin: -16px 0 0; font-size: 14px">Prices in USD before tax; tax is calculated at checkout for your location. Switching an existing Site license to a multi-year term? Email <a href="mailto:sales@mailviewer.app">sales@mailviewer.app</a> and we'll prorate it.</p>
+<div class="card grid2" style="padding: 22px 26px; border-radius: 14px; gap: 24px 40px">
 <div style="display: flex; flex-direction: column; gap: 6px"><h3 style="margin: 0; font-size: 16px; font-weight: 600">Personal is for one person.</h3><p class="muted" style="margin: 0; font-size: 15px; line-height: 1.55">Your own Macs, installed from the App Store, updated by the App Store. No key, no profile, no IT.</p></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><h3 style="margin: 0; font-size: 16px; font-weight: 600">Business plans are for a fleet.</h3><p class="muted" style="margin: 0; font-size: 15px; line-height: 1.55">Macs that IT deploys, configures and patches: the installer package, managed settings, one key for the whole organization, email support and security notices.</p></div>
 </div>
-<p class="faint" style="margin: 0; font-size: 14px">Prices in USD. Sales tax or VAT is calculated at checkout and shown before you pay; card purchases are processed by Stripe as merchant of record. Invoices and purchase orders: sales@mailviewer.app. Not sure yet? Every format the Mac app opens can be tried free at mailviewer.app.</p>
+<p class="faint" style="margin: 0; font-size: 14px">Card purchases are processed by Stripe as merchant of record. Invoices and purchase orders: sales@mailviewer.app. Not sure yet? Every format the Mac app opens can be tried free at <a href="/">mailviewer.app</a>.</p>
 </div>
 </section>
 
 <section class="mv-wrap" style="padding-top: 88px; padding-bottom: 88px">
 <p class="eyebrow" style="margin-bottom: 12px">Questions</p>
 <h2 style="margin: 0 0 32px 0; font-size: 36px; letter-spacing: -0.02em">Before you buy</h2>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px">
+<div class="grid4">
 <div class="feature"><h3 style="margin: 0; font-size: 17px; font-weight: 600">Does Mailviewer upload my mail?</h3><p class="muted" style="margin: 0; font-size: 15.5px; line-height: 1.55">No. The parts of the app that read your messages have no network access, and parsing runs in a separate sandboxed process. The only connection is an update check that sends the app's name and version, and IT can turn it off.</p></div>
 <div class="feature"><h3 style="margin: 0; font-size: 17px; font-weight: 600">How is the license delivered?</h3><p class="muted" style="margin: 0; font-size: 15.5px; line-height: 1.55">One key for your organization, delivered as a configuration profile you push with your MDM, or pasted once into Settings. Replace, loan or re-image Macs freely; nothing to reassign. The key is checked on the Mac, offline.</p></div>
-<div class="feature"><h3 style="margin: 0; font-size: 17px; font-weight: 600">Can I try it first?</h3><p class="muted" style="margin: 0; font-size: 15.5px; line-height: 1.55">Yes. The free web app at mailviewer.app opens the same formats in your browser, and nothing leaves your computer there either.</p></div>
+<div class="feature"><h3 style="margin: 0; font-size: 17px; font-weight: 600">Can I try it first?</h3><p class="muted" style="margin: 0; font-size: 15.5px; line-height: 1.55">Yes. The download is free and runs without a key as an evaluation copy: single messages and Space bar previews work in full, and a mailbox shows its first 25 messages. The free <a href="/">web app</a> opens the same formats in your browser, and nothing leaves your computer there either.</p></div>
 <div class="feature"><h3 style="margin: 0; font-size: 17px; font-weight: 600">What if it doesn't work for us?</h3><p class="muted" style="margin: 0; font-size: 15.5px; line-height: 1.55">Thirty days, no questions asked. Email support@mailviewer.app and we refund the purchase.</p></div>
 </div>
 </section>
@@ -279,10 +322,10 @@ Mailviewer
 <span>© 2026 Machinery Software LLC</span>
 <div style="display: flex; flex-wrap: wrap; gap: 22px">
 <a href="/#/privacy" style="color: var(--ink2)">Privacy</a>
-<a href="mailto:support@mailviewer.app" style="color: var(--ink2)">Terms</a>
+<a href="/#/terms" style="color: var(--ink2)">Terms</a>
 <a href="https://github.com/machinery-software/mailviewer/security" style="color: var(--ink2)">Security</a>
 <a href="https://updates.mailviewer.app/" style="color: var(--ink2)">Downloads</a>
-<a href="mailto:support@mailviewer.app" style="color: var(--ink2)">Contact</a>
+<a href="/#/contact" style="color: var(--ink2)">Contact</a>
 </div>
 </div>
 </footer>
