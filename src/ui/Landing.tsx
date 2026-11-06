@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { setPendingFiles } from "../lib/pendingFiles";
 import { COMPANY_NAME, COMPANY_URL } from "../config";
 import { Footer } from "./Footer";
+import { Logo } from "./Logo";
 
 const FORMATS = [
   { ext: ".eml", name: "Standard email", note: "RFC 5322 / MIME. What most clients export." },
@@ -30,104 +31,128 @@ export default function Landing() {
   return (
     <>
       <section className="hero2">
-        <div className="hero2-copy">
-          <div className="eyebrow">Email viewer · runs in your browser</div>
-          <h1>
-            Open any email file.
-            <br />
-            Read it right here.
-          </h1>
-          <p className="lede">
-            Drag in an export from Outlook, Apple Mail or Gmail — <b>.eml</b>, <b>.msg</b>,{" "}
-            <b>.pst</b>, <b>.mbox</b> and more — and read it like a mail app: folders, threads,
-            attachments and all. Open as many files as you like and browse across them together.
-          </p>
-
-          <div className="privacy-chip">
-            <span className="lock" aria-hidden="true">🔒</span>
-            <span>
-              <b>Private by design.</b> Your files are opened on your own device and never
-              uploaded. <a href="#/privacy">See how it works →</a>
+        <div className="glow" aria-hidden="true" />
+        <div className="gridlines" aria-hidden="true" />
+        <div className="hero2-inner">
+          <div className="hero2-copy">
+            <span className="chip">
+              <span className="chip-dot" aria-hidden="true" />
+              Email viewer · runs in your browser
             </span>
+            <h1>
+              Open any email file. <span className="soft">Read it right here.</span>
+            </h1>
+            <p className="lede">
+              Drag in an export from Outlook, Apple Mail or Gmail — <b>.eml</b>, <b>.msg</b>,{" "}
+              <b>.pst</b>, <b>.mbox</b> and more — and read it like a mail app: folders, threads,
+              attachments and all. Open as many files as you like and browse across them together.
+            </p>
+
+            <div className="privacy-chip">
+              <span className="lock" aria-hidden="true">
+                🔒
+              </span>
+              <span>
+                <b>Private by design.</b> Your files are opened on your own device and never
+                uploaded. <a href="#/privacy">See how it works →</a>
+              </span>
+            </div>
+
+            <p className="hero2-byline">
+              A free tool, built and maintained by{" "}
+              <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">
+                {COMPANY_NAME}
+              </a>
+              .
+            </p>
           </div>
 
-          <p className="hero2-byline">
-            A free tool, built and maintained by{" "}
-            <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">
-              {COMPANY_NAME}
-            </a>
-            .
-          </p>
-        </div>
-
-        <div className="hero2-drop">
-          <div
-            className={`bigdrop ${dragOver ? "over" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              open([...e.dataTransfer.files]);
-            }}
-            onClick={() => inputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-            }}
-          >
-            <div className="bigdrop-icon" aria-hidden="true">
-              <svg viewBox="0 0 48 48" width="48" height="48">
-                <rect x="7" y="12" width="34" height="24" rx="3" fill="none" stroke="var(--teal)" strokeWidth="2.4" />
-                <path d="M7 14l17 13 17-13" fill="none" stroke="var(--teal)" strokeWidth="2.4" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div className="bigdrop-title">Drop email files here</div>
-            <div className="bigdrop-sub">or click to choose — you can pick several</div>
-            <input
-              ref={inputRef}
-              type="file"
-              hidden
-              multiple
-              accept={ACCEPT}
-              onChange={(e) => {
-                const files = [...(e.target.files ?? [])];
-                e.target.value = "";
-                open(files);
+          <div className="hero2-drop">
+            <div
+              className={`bigdrop ${dragOver ? "over" : ""}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
               }}
-            />
-          </div>
-          <div className="hero2-note">Nothing leaves this page. No upload, no account, no waiting.</div>
-        </div>
-      </section>
-
-      <hr className="rule" />
-
-      <section className="section">
-        <h2>Formats</h2>
-        <h3>Every mail file you're likely to be handed</h3>
-        <p>
-          Files are identified by their contents, not their extension — so a .msg that someone
-          renamed to .eml still opens correctly. Notes files (.nsf) and Outlook Express (.dbx)
-          are recognised too, with a note on how to convert them.
-        </p>
-
-        <div className="formats">
-          {FORMATS.map((f) => (
-            <div className="format" key={f.ext}>
-              <div className="format-ext">{f.ext}</div>
-              <div className="format-name">{f.name}</div>
-              <div className="format-note">{f.note}</div>
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                open([...e.dataTransfer.files]);
+              }}
+              onClick={() => inputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+              }}
+            >
+              <div className="bigdrop-icon ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#8FEBD6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 16V4" />
+                  <path d="M7 9l5-5 5 5" />
+                  <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+              </div>
+              <div className="bigdrop-title">Drop email files here</div>
+              <div className="bigdrop-sub">or click to choose — you can pick several</div>
+              <input
+                ref={inputRef}
+                type="file"
+                hidden
+                multiple
+                accept={ACCEPT}
+                onChange={(e) => {
+                  const files = [...(e.target.files ?? [])];
+                  e.target.value = "";
+                  open(files);
+                }}
+              />
             </div>
-          ))}
+            <div className="hero2-note">Nothing leaves this page. No upload, no account, no waiting.</div>
+          </div>
         </div>
       </section>
 
-      <hr className="rule" />
+      {/* The Mac app, below the viewer's intro (MAC-787): the one thing the site sells. */}
+      <div className="maccard-wrap">
+        <a className="maccard" href="/mac">
+          <span className="maccard-logo" aria-hidden="true">
+            <Logo />
+          </span>
+          <span className="maccard-copy">
+            <span className="maccard-title">Mailviewer for Mac</span>
+            <span className="maccard-text">
+              The same viewer as a native app, with Quick Look, mailboxes and MDM deployment.
+            </span>
+          </span>
+          <span className="maccard-cta">
+            Download free, license for teams <span aria-hidden="true">→</span>
+          </span>
+        </a>
+      </div>
+
+      <div className="band">
+        <section className="section">
+          <h2>Formats</h2>
+          <h3>Every mail file you're likely to be handed</h3>
+          <p>
+            Files are identified by their contents, not their extension — so a .msg that someone
+            renamed to .eml still opens correctly. Notes files (.nsf) and Outlook Express (.dbx)
+            are recognised too, with a note on how to convert them.
+          </p>
+
+          <div className="cards cards-4 formats">
+            {FORMATS.map((f) => (
+              <div className="feature format" key={f.ext}>
+                <div className="format-ext">{f.ext}</div>
+                <div className="format-name">{f.name}</div>
+                <div className="format-note">{f.note}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
 
       <section className="section">
         <h2>Privacy</h2>
@@ -138,23 +163,23 @@ export default function Landing() {
           in this tab.
         </p>
 
-        <div className="privacy-cards">
-          <div className="pcard">
-            <div className="pcard-h">Nothing is uploaded</div>
+        <div className="cards cards-3 privacy-cards">
+          <div className="feature pcard">
+            <h4 className="feature-h">Nothing is uploaded</h4>
             <p>Your files are read locally. They never travel to us or anyone else.</p>
           </div>
-          <div className="pcard">
-            <div className="pcard-h">No tracking</div>
+          <div className="feature pcard">
+            <h4 className="feature-h">No tracking</h4>
             <p>No analytics, no accounts, no cookies. Tracking pixels in your mail are blocked.</p>
           </div>
-          <div className="pcard">
-            <div className="pcard-h">You can prove it</div>
+          <div className="feature pcard">
+            <h4 className="feature-h">You can prove it</h4>
             <p>The browser itself enforces this, and you can confirm it in DevTools in a minute.</p>
           </div>
         </div>
 
         <div className="privacy-links">
-          <a className="btn" href="#/privacy">
+          <a className="btn btn-primary" href="#/privacy">
             How your privacy is protected
           </a>
           <a className="btn" href="#/verify">

@@ -3,6 +3,13 @@ import { chromium, firefox, webkit } from "playwright";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, serveBuild } from "./harness.mjs";
+
+/** The Payment Links, read from src/lib/mac-purchase-links.ts: team, business, and site by term. */
+const LINKS = (() => {
+  const src = readFileSync(join(ROOT, "src/lib/mac-purchase-links.ts"), "utf8");
+  const site = Object.fromEntries([...src.matchAll(/^\s+(\d): "(https:\/\/buy\.stripe\.com\/[A-Za-z0-9]+)",$/gm)].map((m) => [m[1], m[2]]));
+  return { site };
+})();
 import { productionHeaders } from "./server.mjs";
 
 /**
@@ -152,6 +159,53 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
     await page.close();
   });
 
+  it("sells the Site license by term: 1 year by default, by click and by arrow key, one Buy link at a time, no script (MAC-787)", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${server.origin}/mac/`);
+    const shown = async () => {
+      const buttons = page.locator('.plan.site a.btn:visible');
+      expect(await buttons.count(), "one Buy link visible").toBe(1);
+      const price = await page.locator(".plan.site .price:visible").innerText();
+      const total = await page.locator(".plan.site .term-total:visible").innerText();
+      return { href: await buttons.getAttribute("href"), price, total, checked: await page.locator('input[name="site-term"]:checked').getAttribute("value") };
+    };
+    expect(await shown()).toEqual({ href: LINKS.site[1], price: "$6,000", total: "$6,000 billed yearly", checked: "1" });
+
+    await page.locator('label[for="site-2y"]').click();
+    expect(await shown()).toEqual({ href: LINKS.site[2], price: "$5,700", total: "$11,400 billed once for 2 years", checked: "2" });
+
+    // Keyboard: the group is one Tab stop after Buy Business; arrows move within it.
+    await page.locator("a", { hasText: "Buy Business" }).focus();
+    await page.keyboard.press(browser.browserType().name() === "webkit" ? "Alt+Tab" : "Tab");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("site-2y");
+    await page.keyboard.press("ArrowRight");
+    expect(await shown()).toEqual({ href: LINKS.site[3], price: "$5,400", total: "$16,200 billed once for 3 years", checked: "3" });
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    expect(await shown()).toEqual({ href: LINKS.site[1], price: "$6,000", total: "$6,000 billed yearly", checked: "1" });
+
+    // The selected segment is the one the card shows, and it is drawn as selected.
+    const selected = await page.locator('label[for="site-1y"]').evaluate((el) => getComputedStyle(el).backgroundImage);
+    const other = await page.locator('label[for="site-2y"]').evaluate((el) => getComputedStyle(el).backgroundImage);
+    expect(selected).not.toBe("none");
+    expect(other).toBe("none");
+    await page.close();
+  });
+
+  it("falls back to the 1-year link with its stylesheet gone: every term shows and the first Buy link is 1 year", async () => {
+    const page = await browser.newPage();
+    await page.route(`${server.origin}/mac/`, async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/<style>[^]*?<\/style>/, "");
+      await route.fulfill({ response: res, body, headers: { ...res.headers(), "content-length": String(Buffer.byteLength(body)) } });
+    });
+    await page.goto(`${server.origin}/mac/`);
+    const hrefs = await page.$$eval(".plan.site a.btn", (as) => as.map((a) => a.href));
+    expect(hrefs).toEqual([LINKS.site[1], LINKS.site[2], LINKS.site[3]]);
+    expect(await page.locator(".plan.site a.btn:visible").count()).toBe(3);
+    await page.close();
+  });
+
   it("does not scroll sideways at 390px", async () => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await page.goto(`${server.origin}/mac/`);
@@ -176,7 +230,7 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
   it("is linked from the web app's header", async () => {
     const page = await browser.newPage();
     await page.goto(`${server.origin}/#/`);
-    const link = page.locator(".topbar .nav a.nav-link", { hasText: "Mailviewer for Mac" });
+    const link = page.locator(".topbar .nav a.nav-link", { hasText: "Mac app" });
     expect(await link.getAttribute("href")).toBe("/mac");
     await Promise.all([page.waitForURL(`${server.origin}/mac`), link.click()]);
     expect(await page.title()).toBe("Mailviewer for Mac: open any email file on your Mac");

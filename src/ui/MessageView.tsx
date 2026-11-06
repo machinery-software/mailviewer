@@ -120,7 +120,7 @@ export default function MessageView({
               <span className="addr-key">Sent by</span>
               <span className="addr-val">
                 {fmtAddresses([message.sender])}{" "}
-                <span style={{ color: "var(--dim)" }}>on behalf of the sender above</span>
+                <span style={{ color: "var(--ink3)" }}>on behalf of the sender above</span>
               </span>
             </>
           )}
