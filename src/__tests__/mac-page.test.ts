@@ -164,8 +164,10 @@ describe("the Mac purchase page", () => {
     expect(markup).toContain('<a href="/" class="muted" style="color: var(--ink2)">Web app</a>');
   });
 
-  it("links Terms and Contact to pages on the site, not to mail", () => {
-    expect(markup).toContain('<a href="/#/terms" style="color: var(--ink2)">Terms</a>');
+  it("links Terms to the Mac terms on the release host and Contact to the site's page, not to mail", () => {
+    // One terms text, published with the app's downloads (David, 6 November); the site's #/terms carries the web app's own.
+    expect(markup).toContain('<a href="https://updates.mailviewer.app/terms/" style="color: var(--ink2)">Terms</a>');
+    expect(hrefs).not.toContain("/#/terms");
     expect(markup).toContain('<a href="/#/contact" style="color: var(--ink2)">Contact</a>');
     expect(hrefs).not.toContain("/mac/terms");
     expect(hrefs.filter((h) => h.startsWith("mailto:"))).toEqual(["mailto:sales@mailviewer.app"]);

@@ -130,14 +130,17 @@ describe.each(ENGINES)("the site in %s", (name, engine) => {
     await page.close();
   });
 
-  it("reaches the terms page from the Mac page's footer, and the terms say what a buyer agrees to", async () => {
+  it("sends the Mac page's Terms to the release host, and the site's Terms to its own terms page", async () => {
     const page = await browser.newPage();
     await page.goto(`${server.origin}/mac/`);
-    await Promise.all([page.waitForURL(`${server.origin}/#/terms`), page.locator("footer a", { hasText: "Terms" }).click()]);
+    expect(await page.locator("footer a", { hasText: "Terms" }).getAttribute("href")).toBe("https://updates.mailviewer.app/terms/");
+    await page.goto(`${server.origin}/#/`);
+    await page.waitForSelector(".footer");
+    await Promise.all([page.waitForURL(`${server.origin}/#/terms`), page.locator(".footer a", { hasText: "Terms" }).click()]);
     await expect.poll(() => page.title()).toBe("Terms · Mailviewer");
     const text = await page.locator(".section").innerText();
-    expect(text).toContain("Terms of sale: Mailviewer for Mac");
-    expect(text).toContain("30 days, no questions.");
+    expect(text).toContain("The web app is free, and these are its terms");
+    expect(await page.locator('.section a[href="https://updates.mailviewer.app/terms/"]').count()).toBe(1);
     await page.close();
   });
 

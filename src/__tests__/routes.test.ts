@@ -58,15 +58,15 @@ describe("document titles", () => {
 });
 
 describe("the terms page", () => {
-  it("holds the Mac app's terms of sale and refund policy, and the web app's terms", () => {
-    const text = mount("#/terms").textContent ?? "";
-    expect(text).toContain("Terms of sale: Mailviewer for Mac");
-    expect(text).toContain("Machinery Software LLC, a Michigan limited liability company");
-    expect(text).toContain("30 days, no questions.");
-    expect(text).toContain("Stripe as the merchant of record");
-    expect(text).toContain("Last updated November 4, 2026");
-    expect(text).toContain("The viewer on this site is free");
-    expect(document.querySelectorAll(".clauses > li")).toHaveLength(12);
+  it("holds the web app's own terms, and points at the Mac terms on the release host rather than copying them", () => {
+    const page = mount("#/terms");
+    const text = page.textContent ?? "";
+    expect(text).toContain("The web app is free, and these are its terms");
+    expect(text).toContain("Provided as is");
+    expect(text).toContain("MIT license");
+    expect(text).not.toMatch(/Terms of sale|merchant of record|Refund policy/);
+    const mac = [...page.querySelectorAll("a")].find((a) => a.getAttribute("href") === "https://updates.mailviewer.app/terms/");
+    expect(mac?.textContent).toBe("updates.mailviewer.app/terms");
   });
 });
 

@@ -394,19 +394,6 @@ kbd {
 .prose-block p { color: var(--ink2); margin: 0 0 12px; max-width: 70ch; font-size: 16px; line-height: 1.6; }
 .prose-block p b { color: var(--ink); font-weight: 600; }
 
-/* The numbered clauses of the terms page. */
-.clauses {
-  margin: 14px 0 0;
-  padding-left: 22px;
-  display: grid;
-  gap: 12px;
-  max-width: 70ch;
-  color: var(--ink2);
-  font-size: 16px;
-  line-height: 1.6;
-}
-.clauses b { color: var(--ink); font-weight: 600; }
-
 /* The contact page's addresses, each with the Mac app's two buttons. */
 .contact-list { display: grid; gap: 14px; margin-top: 28px; }
 .contact-card {
