@@ -212,7 +212,7 @@ describe("the command line", () => {
 
   it("is what release:preview runs before uploading", () => {
     const pkg = JSON.parse(execFileSync("node", ["-p", "JSON.stringify(require('./package.json'))"], { cwd: join(here, ".."), encoding: "utf8" }));
-    expect(pkg.scripts["release:preview"]).toMatch(/npm run security:gate && wrangler versions upload/);
+    expect(pkg.scripts["release:preview"]).toMatch(/npm run security:gate && node scripts\/release\.mjs preview$/);
     expect(pkg.scripts["security:gate"]).toContain("--run-npm-audit");
   });
 });
