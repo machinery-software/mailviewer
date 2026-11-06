@@ -62,8 +62,14 @@ Releases are made by hand, in two gated steps:
 ```bash
 npx wrangler login
 npm run release:preview                            # tests, build, print tests, then upload a version serving no traffic
-npm run release:promote -- <version-id>@100 --yes  # only after checking that version's preview
+npm run release:promote -- <version-id>@100 --yes  # only after checking that version's preview; main, clean tree
+npm run release:status                             # what is live, what is on staging, and MATCH or BEHIND <sha>
 ```
+
+Every uploaded version is tagged with its commit's short sha and messaged
+`<sha> <commit subject>`, so `wrangler versions list` says what each one is.
+Promote runs from `main` with a clean tree only, prints the sha it ships, and
+refuses a version whose tag is not `main`'s HEAD unless told it is a rollback.
 
 Nothing reaches Cloudflare unless the unit and print suites pass, and nothing
 reaches users until a person has looked at the preview. `npm run deploy`
@@ -95,6 +101,7 @@ has the history.
 ```
 public/_headers            The privacy guarantee. Read this first.
 scripts/check-apex.sh      Asks the live site, as a browser, whether the edge rewrote it.
+scripts/release.mjs        preview / promote / status: tagged versions, and MATCH or BEHIND.
 src/lib/model.ts           The one message shape every parser targets.
 src/lib/sanitize.ts        HTML sanitisation + tracking-pixel neutralisation.
 src/lib/netguard.ts        Live self-monitoring of our own network activity.

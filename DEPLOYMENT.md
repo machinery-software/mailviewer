@@ -485,8 +485,13 @@ A release is two commands with a person between them:
 ```bash
 npm run release:preview                            # unit tests → build → print tests → security gate → upload, no traffic
                                                    # then verify the preview yourself (step 3)
-npm run release:promote -- <version-id>@100 --yes  # send production traffic to it
+npm run release:promote -- <version-id>@100 --yes  # send production traffic to it (main, clean tree)
+npm run release:status                             # afterwards, or any time: MATCH, or BEHIND <sha>
 ```
+
+Both commands are `scripts/release.mjs`. Every version it uploads is tagged
+with the commit's short sha and messaged `<sha> <commit subject>`; §8a says how
+to read that back.
 
 Nothing reaches Cloudflare unless both test suites pass, and nothing reaches
 users unless someone runs the second command after looking at the first one's
@@ -498,19 +503,22 @@ tests and no preview.
 
 | | |
 |---|---|
-| **Production version** | `a7ce8d93-1f6a-4398-a0a9-302127bcfdd4` |
-| **Rollback target** | `9b24838a-47b8-4516-84dd-92fc0f193eee` |
+| **Production version** | `457f5dc1-b223-4034-8c89-70d8da9f4ef4` — message `26bc1d3`, the `fix/mac-515-no-transform` branch build, promoted 2026-11-06 14:48Z before PR #26 was merged (§8a) |
+| **Rollback target** | `e6d28f19-461e-4d27-92f9-d7789193be5d` — message `8f626ed`, MAC-787 |
 
-Rolling back is the promote command pointed at the older version. It is instant
-and rebuilds nothing:
+Rolling back is the promote command pointed at the older version, with
+`--allow-mismatch` because that version's commit is, by definition, not
+`main`'s HEAD. It is instant and rebuilds nothing:
 
 ```bash
-npm run release:promote -- 9b24838a-47b8-4516-84dd-92fc0f193eee@100 --yes
+npm run release:promote -- e6d28f19-461e-4d27-92f9-d7789193be5d@100 --yes --allow-mismatch
 ```
 
-Then run the checks in step 5. When a release is promoted, the version it
-replaced becomes the rollback target — update both rows. (§3 is the July audit
-snapshot; this table is the current state.)
+Promote then prints `release:status`, which will say `BEHIND <sha>` until main
+is released again; that is the correct answer, not an error to silence. When a
+release is promoted, the version it replaced becomes the rollback target —
+update both rows. (§3 is the July audit snapshot; this table is the current
+state. From now on `npm run release:status` is the authority, not this table.)
 
 ### Before you start
 
@@ -560,9 +568,13 @@ Cloudflare:
    packages never block. It needs the network, as the upload does; if npm
    cannot reach the registry the gate refuses rather than guess. SECURITY.md
    has the rules and the allowlist for an advisory triaged as unreachable.
-4. **`wrangler versions upload --preview-alias staging`**, with the short commit
-   as the version message — the no-traffic half of a deploy. The version
-   exists and gets a preview URL; the live deployment is untouched.
+4. **`scripts/release.mjs preview`**: `wrangler versions upload --preview-alias
+   staging --tag <sha> --message "<sha> <subject>"`, the short commit as the
+   version's tag and the commit's subject after it in the message — the
+   no-traffic half of a deploy. The version exists and gets a preview URL; the
+   live deployment is untouched. It refuses a dirty tree: a version tagged with
+   a commit must be that commit. `--allow-dirty` uploads anyway, tagged
+   `<sha>-dirty`, for a preview that is only ever a preview.
 
 There is no second build: what is uploaded is the `dist/` the print tests just
 ran against.
@@ -592,12 +604,20 @@ message to PDF and check the last page is there.
 ### 4. Promote it
 
 ```bash
+git switch main && git pull && git status --short    # want: main, no output
 npm run release:promote -- <version-id>@100 --yes
 ```
 
-`release:promote` is `wrangler versions deploy`; everything after `--` is passed
-to it. Run bare, wrangler asks interactively which version to deploy and at what
-percentage — choose the version from step 2, at 100%.
+`release:promote` is `scripts/release.mjs promote`. Before it touches
+Cloudflare it refuses to run from any branch but `main`, from a tree with
+uncommitted changes, or at any percentage but 100 (§7). It looks the version up,
+prints its tag and message next to the local HEAD, and **refuses a version whose
+commit is not `main`'s HEAD**: that is how a branch build reached production on
+6 November (§8a). A deliberate rollback passes `--allow-mismatch`. It then
+prints the sha it is shipping, runs `wrangler versions deploy <id>@100
+--message "<sha> <subject>"` (add `--yes` to skip wrangler's confirmation),
+and ends with `release:status` and the apex check from step 5, so the command's
+exit code is the release's.
 
 **`@100`, not a percentage split.** The build is not self-contained —
 `index.html` points at content-hashed assets — so splitting traffic between two
@@ -625,6 +645,52 @@ the beacon in §5a went unnoticed through a whole round of checking.
 
 If something is wrong, roll back with the command under *Current production and
 rollback* above — it is instant and does not rebuild anything.
+
+---
+
+## 8a. Which version is live?
+
+```bash
+npm run release:status
+```
+
+prints the version production serves, the newest version carrying the
+`staging` alias, the local HEAD, and one last line:
+
+```
+production  457f5dc1-b223-4034-8c89-70d8da9f4ef4  #24  untagged, message says 26bc1d3  "26bc1d3"  2026-11-06T13:51:48.056334Z at 100%
+staging     457f5dc1-b223-4034-8c89-70d8da9f4ef4  #24  untagged, message says 26bc1d3  "26bc1d3"  2026-11-06T13:51:48.056334Z
+local       e49aa6a (main)
+BEHIND 26bc1d3
+```
+
+`MATCH` means the live version's commit is the local HEAD (exit 0). `BEHIND
+<sha>` means it is some other commit, named (exit 1): run it on `main` after a
+pull and the answer is whether what is live is what is merged. `SPLIT` means
+traffic is divided between versions, which §7 says never to do (exit 1). It
+reads `wrangler deployments status --json`, `versions view --json` for each
+live version and `versions list --json`; it changes nothing.
+
+The output above is the real state on 6 November 2026: production is a
+`fix/mac-515-no-transform` preview that was promoted before its PR was merged,
+and `main` has since merged it and PR #27. Versions uploaded before this change
+carry the sha only as their message, which is what "untagged, message says"
+reports; versions from now on carry it as their tag, and `status` says `tag
+<sha>`.
+
+To read the history by hand now that rows carry the sha:
+
+```bash
+npx wrangler versions list            # each version: Version ID, Created, Tag, Message
+npx wrangler versions list --json | jq -r '.[] | [.number, .id[0:8], .annotations["workers/tag"] // "-", .annotations["workers/message"]] | @tsv'
+npx wrangler deployments list --json | jq -r '.[] | [.created_on, .versions[0].version_id[0:8], .versions[0].percentage] | @tsv'
+```
+
+The tag is the short sha to `git show`; the message starts with the same sha
+and continues with the commit subject, so the list reads as a changelog. A
+deployment row names only a version id: look its tag up in the versions list,
+or let `release:status` do it. Nothing can be deleted or relabelled after the
+fact, which is why the label goes on at upload and why promote checks it.
 
 ---
 
