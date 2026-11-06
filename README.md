@@ -71,10 +71,30 @@ deliberately refuses. There is no deploy workflow, and the repository holds no
 Cloudflare credentials. The full procedure — what to check on the preview, and
 how to roll back — is [DEPLOYMENT.md §8](DEPLOYMENT.md#8-releasing).
 
+### After a promote: check the apex as a browser
+
+```bash
+scripts/check-apex.sh                 # https://mailviewer.app, the default
+scripts/check-apex.sh https://staging-mailviewer.patchable-account.workers.dev
+```
+
+It fetches `/` and `/mac/` with Safari's User-Agent string and exits non-zero
+if either body contains `cloudflareinsights` or `beacon.min.js`, or if either
+response's `Cache-Control` lacks `no-transform`. The browser User-Agent is the
+point: the Cloudflare zone has twice appended its Web Analytics beacon to the
+HTML it serves to browsers, with no deploy on our side, and it does not do so
+for `curl`'s own User-Agent, so a plain `curl` always looks clean. A preview on
+`workers.dev` is outside the zone and cannot show it either; only the apex can,
+and only after the promote. `public/_headers` marks every response
+`no-transform`, which tells the proxy it may not rewrite the body; this script
+confirms it held. [DEPLOYMENT.md §5a](DEPLOYMENT.md#5a-the-zone-injects-a-cloudflare-web-analytics-beacon)
+has the history.
+
 ## Layout
 
 ```
 public/_headers            The privacy guarantee. Read this first.
+scripts/check-apex.sh      Asks the live site, as a browser, whether the edge rewrote it.
 src/lib/model.ts           The one message shape every parser targets.
 src/lib/sanitize.ts        HTML sanitisation + tracking-pixel neutralisation.
 src/lib/netguard.ts        Live self-monitoring of our own network activity.

@@ -314,6 +314,15 @@ privacy claim.
 
 ## 5a. The zone injects a Cloudflare Web Analytics beacon
 
+**Status, 2026-11-06 (MAC-515):** not reproducing today, for the second time,
+with nothing changed on our side (the previous stop was 2026-08-20; the one
+before that, 2026-07-15, was followed by a return). `public/_headers` now
+marks every response `Cache-Control: public, max-age=0, must-revalidate,
+no-transform`; `scripts/headers.test.ts` and the print suite hold every HTML
+route to it, and `scripts/check-apex.sh` checks the apex after a promote. See
+*Fixing it* below for what is and is not known about whether that header
+suppresses the injection.
+
 **Status: live right now, on the apex domain, as of 2026-08-17.**
 
 `mailviewer.app` serves a different HTML body depending on who asks:
@@ -379,17 +388,37 @@ Two independent reasons a check would miss it:
 
 ### Fixing it
 
-Dashboard only — the Workers-scoped API token cannot change zone analytics
-settings:
+**In the repository (MAC-515, 2026-11-06):** `public/_headers` sends
+`Cache-Control: public, max-age=0, must-revalidate, no-transform` on every
+response. `no-transform` is the HTTP directive that forbids a proxy from
+changing the body, and Cloudflare's own Web Analytics FAQ says automatic setup
+does not inject the beacon into a response that carries `public, no-transform`
+("Cloudflare proxy will not be able to modify the original payload"). The rest
+of the value is what Workers static assets sent before, so browser caching is
+unchanged. The header is in version control, read by a unit test
+(`scripts/headers.test.ts`, which applies the `_headers` rules per route), by
+the print suite (the value real browsers receive) and by CI's header check, so
+it cannot be dropped quietly the way a dashboard toggle can.
 
-**Cloudflare dashboard → Web Analytics → mailviewer.app → disable Automatic
-Setup** (or remove the site).
+**Unverified:** whether `no-transform` set at the Workers static-assets layer
+suppresses the zone-level RUM injection in practice. The FAQ describes a
+proxied origin; a Worker's static assets are served by Cloudflare itself, and
+the injection was not reproducing on the day the header was added, so there was
+nothing to watch it suppress. The only way to know is to wait for the next
+regression and see whether the beacon stays out. Until then the header is
+cheap insurance, not a proof, and the dashboard remains the fallback.
 
-Verify with a browser User-Agent, not a bare curl:
+**In the dashboard (fallback):** the Workers-scoped API token cannot change
+zone analytics settings. **Cloudflare dashboard → Web Analytics → mailviewer.app
+→ disable Automatic Setup** (or remove the site). The toggle only appears once
+the site has been added to Web Analytics.
+
+Verify with a browser User-Agent, not a bare curl: `scripts/check-apex.sh` does
+exactly this for `/` and `/mac/`, or by hand:
 
 ```bash
 curl -sS -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15" \
   https://mailviewer.app/ | grep -c cloudflareinsights   # want: 0
 ```
 
@@ -578,10 +607,16 @@ page. §7 has the detail.
 ### 5. Confirm, with a browser User-Agent
 
 ```bash
+scripts/check-apex.sh      # / and /mac/ with Safari's UA: no beacon, Cache-Control has no-transform
+```
+
+Or by hand:
+
+```bash
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
-curl -sS -D- -o/dev/null -A "$UA" https://mailviewer.app/ | grep -i 'content-security-policy'
+curl -sS -D- -o/dev/null -A "$UA" https://mailviewer.app/ | grep -i 'content-security-policy\|cache-control'
 curl -sS -A "$UA" https://mailviewer.app/ | grep -c cloudflareinsights   # want: 0
 ```
 

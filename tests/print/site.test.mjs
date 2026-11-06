@@ -174,6 +174,21 @@ describe.each(ENGINES)("the site in %s", (name, engine) => {
     await page.close();
   });
 
+  it("serves every HTML route with Cache-Control: no-transform, as the browser receives it (MAC-515)", async () => {
+    // The header that tells the edge it may not rewrite the body: the zone has
+    // appended an analytics beacon to the HTML before (DEPLOYMENT.md §5a).
+    // scripts/headers.test.ts reads the rule; this reads the response.
+    const page = await browser.newPage();
+    for (const path of ["/", "/index.html", "/mac", "/mac/", "/mac/index.html", "/no-such-page"]) {
+      const res = await page.goto(server.origin + path);
+      expect(res.status(), path).toBe(200);
+      expect(res.headers()["content-type"], path).toContain("text/html");
+      const directives = (res.headers()["cache-control"] ?? "").split(",").map((d) => d.trim());
+      expect(directives, path).toEqual(expect.arrayContaining(["public", "max-age=0", "must-revalidate", "no-transform"]));
+    }
+    await page.close();
+  });
+
   it("renders home, terms and contact under the CSP with no violation, console error or foreign request", async () => {
     for (const hash of ["#/", "#/terms", "#/contact"]) {
       const page = await browser.newPage();
