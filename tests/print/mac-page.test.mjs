@@ -11,6 +11,7 @@ const LINKS = (() => {
   return { site };
 })();
 import { productionHeaders } from "./server.mjs";
+import { MAC_PLANS, perMacLine, siteBreakEvenLine, usd } from "../../src/lib/mac-pricing.ts";
 
 /**
  * MAC-715: the Mac purchase page, as built (dist/mac/index.html) and served
@@ -189,6 +190,63 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
     const other = await page.locator('label[for="site-2y"]').evaluate((el) => getComputedStyle(el).backgroundImage);
     expect(selected).not.toBe("none");
     expect(other).toBe("none");
+    await page.close();
+  });
+
+  it("reads each card's price and then its per-Mac line, in that order, as one paragraph; the Site break-even stays put across terms (MAC-791)", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${server.origin}/mac/`);
+    for (const [name, plan] of [["Team", MAC_PLANS.team], ["Business", MAC_PLANS.business]]) {
+      const card = page.locator(".plan", { has: page.locator("h3", { hasText: new RegExp(`^${name}$`) }) });
+      // The accessibility tree, as a screen reader walks it: one paragraph, the price first.
+      const tree = await card.ariaSnapshot();
+      // The snapshot folds the non-breaking spaces into plain ones; innerText keeps them.
+      expect(tree, name).toContain(`- paragraph: ${usd(plan.price)} / year ${perMacLine(plan).replaceAll("\u00a0", " ")}`);
+      expect(await card.locator("p.price-block").innerText(), name).toBe(`${usd(plan.price)} / year\n${perMacLine(plan)}`);
+      // Laid out, the figure and its unit are on one line: the span is at most two line boxes, and the second starts at "about".
+      const lines = await card.locator(".per-mac").evaluate((el) => {
+        const range = document.createRange();
+        const tops = [];
+        for (const node of el.childNodes) {
+          for (let i = 0; i < node.textContent.length; i++) {
+            range.setStart(node, i); range.setEnd(node, i + 1);
+            const r = range.getBoundingClientRect();
+            if (r.width && !tops.some((t) => Math.abs(t.top - r.top) < 1)) tops.push({ top: r.top, text: node.textContent.slice(i) });
+          }
+        }
+        return tops.map((t) => t.text);
+      });
+      expect(lines.length, `${name}: ${JSON.stringify(lines)}`).toBeLessThanOrEqual(2);
+      if (lines.length === 2) expect(lines[1]).toBe(perMacLine(plan).slice("Works out to ".length));
+      // The line is visibly secondary: smaller than the price, and dimmer than it, but legible.
+      const [price, line] = await Promise.all(
+        [".price", ".per-mac"].map((sel) => card.locator(sel).evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), color: getComputedStyle(el).color, display: getComputedStyle(el).display }))),
+      );
+      expect(line.size, name).toBeLessThan(price.size);
+      expect(line.display).toBe("block");
+      expect(line.color).toBe("rgb(167, 181, 177)");
+      expect(price.color).toBe("rgb(236, 242, 240)");
+    }
+    const personal = page.locator(".plan", { has: page.locator("h3", { hasText: /^Personal$/ }) });
+    expect(await personal.ariaSnapshot()).toContain(`- paragraph: ${usd(MAC_PLANS.personal.price)} / year`);
+    expect(await personal.innerText()).not.toMatch(/one[- ]time/i);
+
+    const site = page.locator(".plan.site");
+    const breakEven = site.locator(".site-per-mac");
+    for (const years of [1, 2, 3]) {
+      await page.locator(`label[for="site-${years}y"]`).click();
+      expect(await breakEven.innerText(), `${years}y`).toBe(siteBreakEvenLine());
+      const priceBox = await page.locator(".plan.site .price:visible").boundingBox();
+      const totalBox = await page.locator(".plan.site .term-total:visible").boundingBox();
+      const lineBox = await breakEven.boundingBox();
+      expect(lineBox.y, `${years}y: below the price`).toBeGreaterThan(priceBox.y + priceBox.height - 1);
+      expect(lineBox.y, `${years}y: below the billed line`).toBeGreaterThanOrEqual(totalBox.y + totalBox.height - 1);
+      // Reading order in the tree: the visible price, its billed line, then the break-even.
+      const tree = await site.ariaSnapshot();
+      const total = await page.locator(".plan.site .term-total:visible").innerText();
+      expect(tree.indexOf(total), `${years}y`).toBeGreaterThan(-1);
+      expect(tree.indexOf(siteBreakEvenLine())).toBeGreaterThan(tree.indexOf(total));
+    }
     await page.close();
   });
 

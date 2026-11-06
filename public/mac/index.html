@@ -62,6 +62,14 @@ body{margin:0;background:#0B1211;color-scheme:dark}
 #site-1y:checked~div.t1,#site-2y:checked~div.t2,#site-3y:checked~div.t3{display:block}
 #site-1y:checked~a.t1,#site-2y:checked~a.t2,#site-3y:checked~a.t3{display:inline-flex}
 .term-total{margin:6px 0 0;font-size:14px;line-height:1.45;color:#AFC0D6}
+/* Under a price, what it comes to per Mac (MAC-791): the price is the headline, this is a
+   line of secondary text in the card's muted ink, which is AA on the card (7.6:1). It is
+   a span in the price's own paragraph, so a screen reader reads the two as one group,
+   price first. The Site card's break-even sits after its term block, the same whichever
+   term is shown, and pulls up against the .term gap to sit as close as the others. */
+.price-block{margin:0}
+.per-mac{display:block;margin-top:6px;font-size:14px;line-height:1.45;letter-spacing:0;font-weight:400;color:var(--ink2)}
+.site-per-mac{margin:-8px 0 0;color:#AFC0D6}
 /* On a touch screen every target is at least 44px tall: the segments and the header's text links (Fitts). */
 @media (pointer: coarse){.seg label{min-height:44px}header nav a{padding:10px 0}}
 .plan-head{display:flex;flex-direction:column;gap:4px}.plan-sub{margin:0;font-size:14px;line-height:1.45}
@@ -235,7 +243,7 @@ Mailviewer
 <div class="plans">
 <div class="plan">
 <div class="plan-head"><h3>Personal</h3><p class="muted plan-sub">One person, their own Macs.</p></div>
-<div><span class="price">$4.99</span><span class="muted"> one-time</span></div>
+<p class="price-block"><span class="price">$4.99</span><span class="muted"> / year</span></p>
 <ul class="feats">
 <li>Every format the app opens</li>
 <li>Space bar previews</li>
@@ -246,7 +254,8 @@ Mailviewer
 </div>
 <div class="plan">
 <div class="plan-head"><h3>Team</h3><p class="muted plan-sub">Up to 25 Macs, then $12 a Mac.</p></div>
-<div><span class="price">$299</span><span class="muted"> / year</span></div>
+<p class="price-block"><span class="price">$299</span><span class="muted"> / year</span>
+<span class="per-mac">Works out to about&nbsp;$1&nbsp;a&nbsp;Mac&nbsp;a&nbsp;month</span></p>
 <ul class="feats">
 <li>Signed, notarized installer package</li>
 <li>One key for the whole organization</li>
@@ -259,7 +268,8 @@ Mailviewer
 <div class="plan hot">
 <span class="ribbon">Most chosen</span>
 <div class="plan-head"><h3>Business</h3><p class="muted plan-sub">Up to 100 Macs, then $9 a Mac.</p></div>
-<div><span class="price">$999</span><span class="muted"> / year</span></div>
+<p class="price-block"><span class="price">$999</span><span class="muted"> / year</span>
+<span class="per-mac">Works out to about&nbsp;83¢&nbsp;a&nbsp;Mac&nbsp;a&nbsp;month</span></p>
 <ul class="feats">
 <li>Everything in Team</li>
 <li>Invoices and purchase orders</li>
@@ -284,6 +294,7 @@ Mailviewer
 <div class="t1"><span class="price">$6,000</span><span style="color: #AFC0D6"> / year</span><p class="term-total">$6,000 billed yearly</p></div>
 <div class="t2"><span class="price">$5,700</span><span style="color: #AFC0D6"> / year</span><p class="term-total">$11,400 billed once for 2 years</p></div>
 <div class="t3"><span class="price">$5,400</span><span style="color: #AFC0D6"> / year</span><p class="term-total">$16,200 billed once for 3 years</p></div>
+<p class="per-mac site-per-mac">Costs less than Business from about 650 Macs</p>
 <ul class="feats site-feats">
 <li>Everything in Business</li>
 <li>Unlimited Macs, no true-ups</li>
