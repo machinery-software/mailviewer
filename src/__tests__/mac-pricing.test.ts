@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SITE_TERMS } from "../lib/mac-purchase-links";
-import { MAC_PLANS, aboutMoney, breakEvenMacs, overageLine, perMacAMonth, perMacLine, siteBreakEvenLine, usd } from "../lib/mac-pricing";
+import { MAC_PLANS, NBSP, aboutMoney, breakEvenMacs, overageLine, perMacAMonth, perMacLine, siteBreakEvenLine, usd } from "../lib/mac-pricing";
+
+/** A line as it reads, with the non-breaking spaces as plain ones. */
+const plain = (line: string) => line.replaceAll(NBSP, " ");
 
 /**
  * MAC-791: the lines under the plan prices are computed from the plan data,
@@ -37,12 +40,12 @@ describe("the Mac plans' prices", () => {
 describe("the per-Mac lines (MAC-791)", () => {
   it("Team: $299 over 25 Macs over twelve months is about $1 a Mac a month", () => {
     expect(perMacAMonth(MAC_PLANS.team)).toBeCloseTo(11.96 / 12, 4);
-    expect(perMacLine(MAC_PLANS.team)).toBe("Works out to about $1 a Mac a month");
+    expect(plain(perMacLine(MAC_PLANS.team))).toBe("Works out to about $1 a Mac a month");
   });
 
   it("Business: $999 over 100 Macs over twelve months is about 83¢ a Mac a month", () => {
     expect(perMacAMonth(MAC_PLANS.business)).toBeCloseTo(9.99 / 12, 4);
-    expect(perMacLine(MAC_PLANS.business)).toBe("Works out to about 83¢ a Mac a month");
+    expect(plain(perMacLine(MAC_PLANS.business))).toBe("Works out to about 83¢ a Mac a month");
   });
 
   it("Site: Business with its overage reaches the 1-year Site price at about 650 Macs", () => {
@@ -81,12 +84,23 @@ describe("the wording rules (MAC-791)", () => {
   });
 
   it("put 'about' before every figure, 'Works out to' before a per-Mac figure, say 'a Mac a month', and never 'per device' or '/ device'", () => {
-    for (const line of [perMacLine(MAC_PLANS.team), perMacLine(MAC_PLANS.business), siteBreakEvenLine()]) {
+    for (const line of [perMacLine(MAC_PLANS.team), perMacLine(MAC_PLANS.business), siteBreakEvenLine()].map(plain)) {
       expect(line).toMatch(/about (\$\d+|\d+¢|\d+ Macs)/);
       expect(line).not.toMatch(/device/i);
       expect(line).not.toMatch(/per Mac|\/ Mac|per month|\/ month/i);
     }
-    for (const plan of [MAC_PLANS.team, MAC_PLANS.business]) expect(perMacLine(plan)).toMatch(/^Works out to about (\$\d+|\d+¢) a Mac a month$/);
+    for (const plan of [MAC_PLANS.team, MAC_PLANS.business]) expect(plain(perMacLine(plan))).toMatch(/^Works out to about (\$\d+|\d+¢) a Mac a month$/);
     expect(siteBreakEvenLine()).not.toMatch(/^Works out to/);
+  });
+
+  it("never split the figure from its unit: non-breaking spaces from 'about' on, and the one break after 'Works out to'", () => {
+    expect(perMacLine(MAC_PLANS.team)).toBe(`Works out to about${NBSP}$1${NBSP}a${NBSP}Mac${NBSP}a${NBSP}month`);
+    expect(perMacLine(MAC_PLANS.business)).toBe(`Works out to about${NBSP}83¢${NBSP}a${NBSP}Mac${NBSP}a${NBSP}month`);
+    for (const plan of [MAC_PLANS.team, MAC_PLANS.business]) {
+      const line = perMacLine(plan);
+      expect(line.split(" ")).toEqual(["Works", "out", "to", expect.stringMatching(/^about\u00a0/)]);
+      expect(line.slice(line.indexOf("about"))).not.toContain(" ");
+    }
+    expect(siteBreakEvenLine()).not.toContain(NBSP);
   });
 });

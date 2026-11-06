@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import html from "../../public/mac/index.html?raw";
 import { MAC_APP_VERSION, MAC_DOWNLOAD_URL, MAC_PURCHASE_LINKS, SITE_TERMS } from "../lib/mac-purchase-links";
-import { MAC_PLANS, overageLine, perMacLine, siteBreakEvenLine, usd } from "../lib/mac-pricing";
+import { MAC_PLANS, NBSP, overageLine, perMacLine, siteBreakEvenLine, usd } from "../lib/mac-pricing";
+/** A derived line as the page writes it: U+00A0 as the entity, so an editor can see it. */
+const onPage = (line: string) => line.replaceAll(NBSP, "&nbsp;");
 
 /**
  * MAC-715, MAC-787: the Mac purchase page, public/mac/index.html, served at /mac.
@@ -131,8 +133,11 @@ describe("the Mac purchase page", () => {
     ])("%s: the price, then what it comes to a Mac a month, in one paragraph", (name, plan) => {
       const c = card(name);
       expect(c).toContain(
-        `<p class="price-block"><span class="price">${usd(plan.price)}</span><span class="muted"> / year</span>\n<span class="per-mac">${perMacLine(plan)}</span></p>`,
+        `<p class="price-block"><span class="price">${usd(plan.price)}</span><span class="muted"> / year</span>\n<span class="per-mac">${onPage(perMacLine(plan))}</span></p>`,
       );
+      // Written as entities, never as a raw U+00A0 an editor cannot see.
+      expect(c).not.toContain(NBSP);
+      expect(onPage(perMacLine(plan)).match(/&nbsp;/g)).toHaveLength(5);
       expect(c).toContain(`<p class="muted plan-sub">${overageLine(plan)}</p>`);
       expect(c.match(/class="per-mac/g)).toHaveLength(1);
     });
@@ -146,8 +151,8 @@ describe("the Mac purchase page", () => {
     });
 
     it("says the three lines the ticket asks for, and nothing per device", () => {
-      expect(perMacLine(team)).toBe("Works out to about $1 a Mac a month");
-      expect(perMacLine(business)).toBe("Works out to about 83¢ a Mac a month");
+      expect(perMacLine(team).replaceAll(NBSP, " ")).toBe("Works out to about $1 a Mac a month");
+      expect(perMacLine(business).replaceAll(NBSP, " ")).toBe("Works out to about 83¢ a Mac a month");
       expect(siteBreakEvenLine()).toBe("Costs less than Business from about 650 Macs");
       expect(markup).not.toMatch(/per device|\/ device|per Mac\b|\/ Mac\b/i);
       expect(markup).not.toContain("a Mac per month");

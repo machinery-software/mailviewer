@@ -21,3 +21,7 @@ Do not touch the multi-year segmented control, the Stripe links, or the terms li
 ## Follow-up (6 November)
 
 MAC-791, one wording change to the derived lines: prefix "Works out to" on Team and Business, so they read "Works out to about $1 a Mac a month" and "Works out to about 83¢ a Mac a month". Site's break-even line is unchanged. Update the test fixtures and the screenshots, rerun the Laws of UX checklist on the section, and push to the same PR. No other changes.
+
+## Follow-up 2 (6 November)
+
+MAC-791, last change: in perMacLine() join the figure and its unit with non-breaking spaces so "about $1 a Mac a month" and "about 83¢ a Mac a month" never split across lines; the only permitted break is after "Works out to". No type or padding changes. Update the mutant that checks the page text if it compares exact whitespace, refresh the two desktop screenshots, and push to the same PR.

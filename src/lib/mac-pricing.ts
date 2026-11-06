@@ -27,6 +27,9 @@ export const MAC_PLANS = {
 
 type Metered = typeof MAC_PLANS.team | typeof MAC_PLANS.business;
 
+/** U+00A0, the space a line never breaks at. */
+export const NBSP = "\u00a0";
+
 /** A dollar amount as the page prints it: whole dollars with thousands separators, cents only when there are any. */
 export function usd(amount: number): string {
   const cents = Math.round(amount * 100);
@@ -49,9 +52,15 @@ export function perMacAMonth(plan: Metered): number {
   return plan.price / plan.includedMacs / 12;
 }
 
-/** The line under a Team or Business price. "about" always comes before the figure (David, 6 November: "Works out to" in front). */
+/**
+ * The line under a Team or Business price. "about" always comes before the
+ * figure (David, 6 November: "Works out to" in front). From "about" on, the
+ * words are joined with non-breaking spaces, so the figure and its unit never
+ * split across lines; the one place the line may break is after "Works out
+ * to". The page writes them as &nbsp;.
+ */
 export function perMacLine(plan: Metered): string {
-  return `Works out to about ${aboutMoney(perMacAMonth(plan))} a Mac a month`;
+  return `Works out to ${["about", aboutMoney(perMacAMonth(plan)), "a", "Mac", "a", "month"].join(NBSP)}`;
 }
 
 /** The line under a Team or Business name: what is included, and the rate past it. */

@@ -200,8 +200,24 @@ describe.each(ENGINES)("the Mac purchase page in %s", (_name, engine) => {
       const card = page.locator(".plan", { has: page.locator("h3", { hasText: new RegExp(`^${name}$`) }) });
       // The accessibility tree, as a screen reader walks it: one paragraph, the price first.
       const tree = await card.ariaSnapshot();
-      expect(tree, name).toContain(`- paragraph: ${usd(plan.price)} / year ${perMacLine(plan)}`);
+      // The snapshot folds the non-breaking spaces into plain ones; innerText keeps them.
+      expect(tree, name).toContain(`- paragraph: ${usd(plan.price)} / year ${perMacLine(plan).replaceAll("\u00a0", " ")}`);
       expect(await card.locator("p.price-block").innerText(), name).toBe(`${usd(plan.price)} / year\n${perMacLine(plan)}`);
+      // Laid out, the figure and its unit are on one line: the span is at most two line boxes, and the second starts at "about".
+      const lines = await card.locator(".per-mac").evaluate((el) => {
+        const range = document.createRange();
+        const tops = [];
+        for (const node of el.childNodes) {
+          for (let i = 0; i < node.textContent.length; i++) {
+            range.setStart(node, i); range.setEnd(node, i + 1);
+            const r = range.getBoundingClientRect();
+            if (r.width && !tops.some((t) => Math.abs(t.top - r.top) < 1)) tops.push({ top: r.top, text: node.textContent.slice(i) });
+          }
+        }
+        return tops.map((t) => t.text);
+      });
+      expect(lines.length, `${name}: ${JSON.stringify(lines)}`).toBeLessThanOrEqual(2);
+      if (lines.length === 2) expect(lines[1]).toBe(perMacLine(plan).slice("Works out to ".length));
       // The line is visibly secondary: smaller than the price, and dimmer than it, but legible.
       const [price, line] = await Promise.all(
         [".price", ".per-mac"].map((sel) => card.locator(sel).evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), color: getComputedStyle(el).color, display: getComputedStyle(el).display }))),
