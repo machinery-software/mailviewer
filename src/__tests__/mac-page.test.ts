@@ -81,9 +81,9 @@ describe("the Mac purchase page", () => {
         expect(site).toContain(`<div class="t${years}"><span class="price">${perYear}</span>`);
         expect(site).toContain(`<p class="term-total">${total}</p>`);
       }
-      expect(site).toContain("$6,000</span><span style=\"color: #AFC0D6\"> / year</span>");
-      expect(site).toContain("$5,700</span><span style=\"color: #AFC0D6\"> per year</span>");
-      expect(site).toContain("$5,400</span><span style=\"color: #AFC0D6\"> per year</span>");
+      // "/ year" on every term, as on the Team and Business cards; the sub-line says what is billed.
+      for (const { perYear } of SITE_TERMS) expect(site).toContain(`${perYear}</span><span style="color: #AFC0D6"> / year</span>`);
+      expect(site).not.toContain("per year");
       expect(site).not.toContain("From $");
     });
 
