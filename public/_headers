@@ -30,3 +30,12 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+  # The edge may not rewrite the body. Without no-transform the zone's Web
+  # Analytics "automatic setup" has twice appended its beacon.min.js to the HTML
+  # served to browsers, with no deploy on our side (MAC-515, DEPLOYMENT.md §5a).
+  # The CSP blocked it, but a tracker the browser had to block is not "no
+  # trackers of any kind". The rest of the value is what Workers sends on its
+  # own, kept as is. scripts/headers.test.ts holds every HTML route to this;
+  # scripts/check-apex.sh checks the live apex after a promote.
+  Cache-Control: public, max-age=0, must-revalidate, no-transform

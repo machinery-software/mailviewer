@@ -94,6 +94,7 @@ jobs:
           check "frame-ancestors 'none'" "Without this the viewer can be framed for clickjacking."
           check "script-src 'self'"     "Without this an inline script from a message body could run."
           check "Referrer-Policy: no-referrer" "Without this an outbound click leaks the viewer URL."
+          check "no-transform"          "Without this the edge may rewrite the HTML; it has injected an analytics beacon before (MAC-515)."
           exit $fail
 
       - name: Upload build artifact
