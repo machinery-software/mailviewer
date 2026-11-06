@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import html from "../../public/mac/index.html?raw";
 import { MAC_APP_VERSION, MAC_DOWNLOAD_URL, MAC_PURCHASE_LINKS, SITE_TERMS } from "../lib/mac-purchase-links";
+import { MAC_PLANS, overageLine, perMacLine, siteBreakEvenLine, usd } from "../lib/mac-pricing";
 
 /**
  * MAC-715, MAC-787: the Mac purchase page, public/mac/index.html, served at /mac.
@@ -12,7 +13,9 @@ import { MAC_APP_VERSION, MAC_DOWNLOAD_URL, MAC_PURCHASE_LINKS, SITE_TERMS } fro
  * Mac App Store", the requirements line names macOS 13, the logo links to /),
  * and MAC-787 (5 November): the Site license sold by term, the Download button
  * and version, the tax line under the cards, Terms and Contact as pages, the
- * "Mac app" tab, and grids whose column counts divide their cards.
+ * "Mac app" tab, and grids whose column counts divide their cards; and
+ * MAC-791 (6 November): Personal at $4.99 a year, and under each price what
+ * it comes to per Mac, computed from src/lib/mac-pricing.ts.
  *
  * It is static under the site's CSP: no script, nothing from another origin.
  * Team, Business and Site license buy through Stripe Payment Links, recorded
@@ -110,6 +113,53 @@ describe("the Mac purchase page", () => {
       // The hidden radios stay focusable: hidden by clipping, not display:none.
       expect(style).toMatch(/\.term legend,\.term input\{position:absolute;width:1px;height:1px/);
       expect(style).not.toMatch(/\.term input\{[^}]*display:none/);
+    });
+  });
+
+  describe("the prices and the lines under them, from mac-pricing.ts (MAC-791)", () => {
+    const { personal, team, business, site: sitePlan } = MAC_PLANS;
+
+    it("sells Personal at $4.99 a year, the App Store subscription, not one-time", () => {
+      expect(card("Personal")).toContain(`<p class="price-block"><span class="price">${usd(personal.price)}</span><span class="muted"> / year</span></p>`);
+      expect(usd(personal.price)).toBe("$4.99");
+      expect(html).not.toMatch(/one[- ]time/i);
+    });
+
+    it.each([
+      ["Team", team],
+      ["Business", business],
+    ])("%s: the price, then what it comes to a Mac a month, in one paragraph", (name, plan) => {
+      const c = card(name);
+      expect(c).toContain(
+        `<p class="price-block"><span class="price">${usd(plan.price)}</span><span class="muted"> / year</span>\n<span class="per-mac">${perMacLine(plan)}</span></p>`,
+      );
+      expect(c).toContain(`<p class="muted plan-sub">${overageLine(plan)}</p>`);
+      expect(c.match(/class="per-mac/g)).toHaveLength(1);
+    });
+
+    it("Site license: the break-even against Business, once, after the term block and before the features, whichever term shows", () => {
+      expect(site).toContain(`</div>\n<p class="per-mac site-per-mac">${siteBreakEvenLine()}</p>\n<ul class="feats site-feats">`);
+      expect(site.match(/class="per-mac/g)).toHaveLength(1);
+      // Inside no term block: it does not change with the segmented control.
+      for (const years of [1, 2, 3]) expect(site.slice(site.indexOf(`<div class="t${years}">`), site.indexOf("</div>", site.indexOf(`<div class="t${years}">`)))).not.toContain("per-mac");
+      expect(SITE_TERMS.find((t) => t.years === 1)?.perYear).toBe(usd(sitePlan.price));
+    });
+
+    it("says the three lines the ticket asks for, and nothing per device", () => {
+      expect(perMacLine(team)).toBe("about $1 a Mac a month");
+      expect(perMacLine(business)).toBe("about 83¢ a Mac a month");
+      expect(siteBreakEvenLine()).toBe("Costs less than Business from about 650 Macs");
+      expect(markup).not.toMatch(/per device|\/ device|per Mac\b|\/ Mac\b/i);
+      expect(markup).not.toContain("a Mac per month");
+    });
+
+    it("styles the line as a block under the price, in the card's muted ink", () => {
+      expect(style).toContain(".price-block{margin:0}");
+      expect(style).toMatch(/\.per-mac\{display:block;margin-top:6px;font-size:14px;line-height:1\.45;[^}]*color:var\(--ink2\)\}/);
+      expect(style).toContain(".site-per-mac{margin:-8px 0 0;color:#AFC0D6}");
+      // The description and the FAQ carry no price, so there is nothing there to go stale.
+      expect(html.match(/<meta name="description" content="([^"]*)"/)?.[1]).not.toMatch(/\$|one-time|year/);
+      expect(html).not.toContain("application/ld+json");
     });
   });
 
@@ -214,7 +264,7 @@ describe("the Mac purchase page's contrast (WCAG AA, 4.5:1 for normal text)", ()
   );
 
   it("reads its palette from the page's CSS variables", () => {
-    expect(vars).toMatchObject({ bg: "#0B1211", card: "#131D1B", ink: "#ECF2F0", ink2: "#A7B5B1", ink3: "#788683" });
+    expect(vars).toMatchObject({ bg: "#0B1211", card: "#131D1B", card2: "#172320", ink: "#ECF2F0", ink2: "#A7B5B1", ink3: "#788683" });
   });
 
   it("passes AA with --ink, --ink2 and --ink3 on both backgrounds", () => {
@@ -227,5 +277,12 @@ describe("the Mac purchase page's contrast (WCAG AA, 4.5:1 for normal text)", ()
     expect(contrast(vars.ink2, vars.card).toFixed(2)).toBe("8.11");
     expect(contrast(vars.ink3, vars.bg).toFixed(2)).toBe("4.99");
     expect(contrast(vars.ink3, vars.card).toFixed(2)).toBe("4.54");
+  });
+
+  it("passes AA with the per-Mac line's ink on the whole card gradient, and the Site card's (MAC-791)", () => {
+    // --ink3 would not: 4.27:1 on --card2, the top of the gradient, where the price sits.
+    expect(contrast(vars.ink2, vars.card2).toFixed(2)).toBe("7.62");
+    expect(contrast(vars.ink3, vars.card2)).toBeLessThan(4.5);
+    for (const bg of ["#1A2A3E", "#121D2B"]) expect(contrast("#AFC0D6", bg)).toBeGreaterThanOrEqual(4.5);
   });
 });
