@@ -49,9 +49,9 @@ export function perMacAMonth(plan: Metered): number {
   return plan.price / plan.includedMacs / 12;
 }
 
-/** The line under a Team or Business price. "about" always comes before the figure. */
+/** The line under a Team or Business price. "about" always comes before the figure (David, 6 November: "Works out to" in front). */
 export function perMacLine(plan: Metered): string {
-  return `about ${aboutMoney(perMacAMonth(plan))} a Mac a month`;
+  return `Works out to about ${aboutMoney(perMacAMonth(plan))} a Mac a month`;
 }
 
 /** The line under a Team or Business name: what is included, and the rate past it. */

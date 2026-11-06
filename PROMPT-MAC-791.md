@@ -17,3 +17,7 @@ Ticket MAC-791, follow-up to MAC-787, on the /mac/ page of mailviewer.app. Work 
 5. PR body: before/after screenshots of the three cards in light mode, the test output, and a device-check list for David (Safari, dark mode, VoiceOver on the Team card).
 
 Do not touch the multi-year segmented control, the Stripe links, or the terms link.
+
+## Follow-up (6 November)
+
+MAC-791, one wording change to the derived lines: prefix "Works out to" on Team and Business, so they read "Works out to about $1 a Mac a month" and "Works out to about 83¢ a Mac a month". Site's break-even line is unchanged. Update the test fixtures and the screenshots, rerun the Laws of UX checklist on the section, and push to the same PR. No other changes.

@@ -146,8 +146,8 @@ describe("the Mac purchase page", () => {
     });
 
     it("says the three lines the ticket asks for, and nothing per device", () => {
-      expect(perMacLine(team)).toBe("about $1 a Mac a month");
-      expect(perMacLine(business)).toBe("about 83¢ a Mac a month");
+      expect(perMacLine(team)).toBe("Works out to about $1 a Mac a month");
+      expect(perMacLine(business)).toBe("Works out to about 83¢ a Mac a month");
       expect(siteBreakEvenLine()).toBe("Costs less than Business from about 650 Macs");
       expect(markup).not.toMatch(/per device|\/ device|per Mac\b|\/ Mac\b/i);
       expect(markup).not.toContain("a Mac per month");
