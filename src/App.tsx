@@ -56,6 +56,10 @@ export default function App() {
           >
             Verify
           </a>
+          {/* The Mac app's purchase page, public/mac/index.html (MAC-715). */}
+          <a className="nav-link" href="/mac">
+            Mailviewer for Mac
+          </a>
           <a className="nav-link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
             Source
           </a>
