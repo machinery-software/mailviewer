@@ -19,7 +19,7 @@ import { serveBuild } from "./harness.mjs";
 const ENGINES = [["chromium", chromium], ["firefox", firefox], ["webkit", webkit]];
 const WIDTHS = [1280, 900, 390];
 const ROUTES = {
-  "#/": "Mailviewer",
+  "#/": "Mailviewer: read .eml, .msg and .mbox files in your browser",
   "#/open": "Open a file · Mailviewer",
   "#/privacy": "Privacy · Mailviewer",
   "#/verify": "Verify · Mailviewer",
@@ -179,9 +179,11 @@ describe.each(ENGINES)("the site in %s", (name, engine) => {
     // appended an analytics beacon to the HTML before (DEPLOYMENT.md §5a).
     // scripts/headers.test.ts reads the rule; this reads the response.
     const page = await browser.newPage();
-    for (const path of ["/", "/index.html", "/mac", "/mac/", "/mac/index.html", "/no-such-page"]) {
+    // A path that is not a page is the not-found page, with a 404 (wrangler.jsonc).
+    const paths = ["/", "/index.html", "/mac", "/mac/", "/mac/index.html", "/guides/template-check/", "/no-such-page"];
+    for (const path of paths) {
       const res = await page.goto(server.origin + path);
-      expect(res.status(), path).toBe(200);
+      expect(res.status(), path).toBe(path === "/no-such-page" ? 404 : 200);
       expect(res.headers()["content-type"], path).toContain("text/html");
       const directives = (res.headers()["cache-control"] ?? "").split(",").map((d) => d.trim());
       expect(directives, path).toEqual(expect.arrayContaining(["public", "max-age=0", "must-revalidate", "no-transform"]));

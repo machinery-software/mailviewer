@@ -6,10 +6,8 @@ import Report from "./ui/ReportProblem";
 import Terms from "./ui/Terms";
 import Verify from "./ui/Verify";
 import Viewer from "./ui/Viewer";
-import { Logo } from "./ui/Logo";
-import { SOURCE_URL } from "./config";
-
-type Route = "home" | "privacy" | "verify" | "open" | "report" | "terms" | "contact";
+import { type Route, Topbar } from "./ui/Topbar";
+import { HOME } from "./site/pages";
 
 function currentRoute(): Route {
   const h = location.hash.replace(/^#\/?/, "");
@@ -28,7 +26,9 @@ function currentRoute(): Route {
  * its own document and names itself.
  */
 export const TITLES: Record<Route, string> = {
-  home: "Mailviewer",
+  // The home page's title is the static page's (src/site/pages.ts), so the
+  // tab says the same thing before and after the app boots.
+  home: HOME.title,
   open: "Open a file · Mailviewer",
   privacy: "Privacy · Mailviewer",
   verify: "Verify · Mailviewer",
@@ -37,8 +37,12 @@ export const TITLES: Record<Route, string> = {
   contact: "Contact · Mailviewer",
 };
 
-export default function App() {
-  const [route, setRoute] = useState<Route>(currentRoute);
+/**
+ * `initialRoute` is for the build, which renders the home page to static HTML
+ * (scripts/build-static.mjs) where there is no location to read.
+ */
+export default function App({ initialRoute }: { initialRoute?: Route }) {
+  const [route, setRoute] = useState<Route>(() => initialRoute ?? currentRoute());
 
   useEffect(() => {
     const onHash = () => {
@@ -54,42 +58,9 @@ export default function App() {
     document.title = TITLES[route];
   }, [route]);
 
-  const current = (r: Route) => (route === r ? "page" : undefined);
-
   return (
     <div className="shell">
-      <header className="topbar">
-        <a className="brand" href="#/">
-          <Logo />
-          Mailviewer
-        </a>
-        <nav className="nav" aria-label="Main">
-          <a className="nav-link" href="#/open" aria-current={current("open")}>
-            Open a file
-          </a>
-          {/* The Mac app's purchase page, public/mac/index.html (MAC-715, MAC-787). */}
-          <a className="nav-link" href="/mac">
-            Mac app
-          </a>
-          <a className="nav-link" href="#/privacy" aria-current={current("privacy")}>
-            Privacy
-          </a>
-          <a className="nav-link" href="#/verify" aria-current={current("verify")}>
-            Verify
-          </a>
-          <a className="nav-link" href={SOURCE_URL} target="_blank" rel="noopener noreferrer">
-            Source
-          </a>
-          {/*
-            Reachable from every route, including the viewer, which has no
-            footer -- someone whose file just refused to open is looking at the
-            viewer, and that is precisely when they need this link.
-          */}
-          <a className="nav-link" href="#/report" aria-current={current("report")}>
-            Report a problem
-          </a>
-        </nav>
-      </header>
+      <Topbar current={route} />
 
       {route === "home" && <Landing />}
       {route === "privacy" && <Privacy />}

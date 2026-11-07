@@ -13,6 +13,9 @@ const TYPES = {
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".json": "application/json",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml",
+  ".png": "image/png",
 };
 
 /** Parse the `/*` block of public/_headers into a plain header map. */
@@ -41,13 +44,18 @@ export async function startServer(distDir, headersFile) {
     let file = join(root, url.pathname);
     if (!file.startsWith(root)) return res.writeHead(403).end();
     // A folder is served by its index.html, as Cloudflare serves /mac and
-    // /mac/ from dist/mac/index.html. Anything else that is missing gets the
-    // app (not_found_handling: single-page-application).
+    // /mac/ from dist/mac/index.html. Anything else that is missing gets
+    // dist/404.html with status 404 (wrangler.jsonc, not_found_handling:
+    // 404-page).
     if (existsSync(join(file, "index.html"))) file = join(file, "index.html");
-    if (!existsSync(file) || url.pathname === "/") file = join(root, "index.html");
+    let status = 200;
+    if (!existsSync(file)) {
+      file = join(root, "404.html");
+      status = 404;
+    }
     try {
       const body = await readFile(file);
-      res.writeHead(200, {
+      res.writeHead(status, {
         ...headers,
         "Content-Type": TYPES[extname(file)] ?? "application/octet-stream",
       });

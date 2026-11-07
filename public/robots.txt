@@ -1,0 +1,6 @@
+# Every page of mailviewer.app may be crawled. The pages are static; the
+# viewer itself reads mail in the visitor's browser and has nothing to index.
+User-agent: *
+Allow: /
+
+Sitemap: https://mailviewer.app/sitemap.xml

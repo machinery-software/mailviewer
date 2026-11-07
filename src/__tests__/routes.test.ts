@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App, { TITLES } from "../App";
+import { HOME } from "../site/pages";
 
 /**
  * MAC-787: one document title per route, and the pages the footers link to
@@ -34,7 +35,7 @@ afterEach(() => {
 
 describe("document titles", () => {
   it.each([
-    ["#/", "Mailviewer"],
+    ["#/", "Mailviewer: read .eml, .msg and .mbox files in your browser"],
     ["#/open", "Open a file · Mailviewer"],
     ["#/privacy", "Privacy · Mailviewer"],
     ["#/verify", "Verify · Mailviewer"],
@@ -48,7 +49,7 @@ describe("document titles", () => {
 
   it("changes the title when the route changes", () => {
     mount("#/");
-    expect(document.title).toBe("Mailviewer");
+    expect(document.title).toBe(HOME.title);
     act(() => {
       location.hash = "#/privacy";
       dispatchEvent(new HashChangeEvent("hashchange"));
