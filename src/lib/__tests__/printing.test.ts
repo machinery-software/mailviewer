@@ -4,6 +4,8 @@ import {
   PRINT_CONTENT_WIDTH_PX,
   PRINT_LIST_CAP,
   PRINT_PAGE_HEIGHT_PX,
+  SAFARI_PDF_HINT,
+  isMacSafari,
   listScopeLabel,
   messagesToPrint,
   printJobDescription,
@@ -110,5 +112,40 @@ describe("PRINT_PAGE_HEIGHT_PX", () => {
   it("is A4's printable height, which is taller than US Letter's", () => {
     const letterPrintableHeightPx = Math.round(((279.4 - 24) / 25.4) * 96);
     expect(PRINT_PAGE_HEIGHT_PX).toBeGreaterThan(letterPrintableHeightPx);
+  });
+});
+
+describe("isMacSafari", () => {
+  // Real user-agent strings, current as of November 2026.
+  const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
+  const yes: Array<[string, string]> = [
+    ["Safari 27 on macOS", `${MAC} AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0.1 Safari/605.1.15`],
+    ["Safari 18 on macOS", `${MAC} AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15`],
+    ["Safari Technology Preview", `${MAC} AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.1 Safari/605.1.15`],
+  ];
+  const no: Array<[string, string, number?]> = [
+    ["Chrome on macOS", `${MAC} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36`],
+    ["Edge on macOS", `${MAC} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0`],
+    ["Opera on macOS", `${MAC} AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 OPR/140.0.0.0`],
+    ["Firefox on macOS", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0"],
+    ["Safari on iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1"],
+    ["Safari on iPad, desktop mode", `${MAC} AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15`, 5],
+    ["Chrome on iPhone", "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.0.0 Mobile/15E148 Safari/604.1"],
+    ["Chrome on Windows", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"],
+    ["Chrome on Android", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36"],
+    ["headless Chrome", `${MAC} AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36`],
+    ["a WKWebView with no Safari token", `${MAC} AppleWebKit/605.1.15 (KHTML, like Gecko)`],
+    ["an empty user agent", ""],
+  ];
+
+  for (const [what, ua] of yes) {
+    it(`is true for ${what}`, () => expect(isMacSafari(ua, 0)).toBe(true));
+  }
+  for (const [what, ua, touch] of no) {
+    it(`is false for ${what}`, () => expect(isMacSafari(ua, touch ?? 0)).toBe(false));
+  }
+
+  it("names the menu exactly as Safari's print sheet does", () => {
+    expect(SAFARI_PDF_HINT).toBe("In the print sheet, choose PDF ▸ Save as PDF.");
   });
 });

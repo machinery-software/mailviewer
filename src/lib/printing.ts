@@ -65,6 +65,36 @@ export function listScopeLabel(listedCount: number): string {
 }
 
 /**
+ * The line shown under the print options in Safari on a Mac, where the print
+ * sheet has no "Save as PDF" destination of its own: it is in the PDF menu at
+ * the bottom-left. Chrome, Edge and Firefox put "Save as PDF" in the
+ * destination list, where people already look, so they get no hint.
+ */
+export const SAFARI_PDF_HINT = "In the print sheet, choose PDF ▸ Save as PDF.";
+
+/**
+ * Is this Safari on a Mac?
+ *
+ * Read from the user agent, in the page, and never sent anywhere -- the site
+ * cannot send anything (connect-src 'none'). Safari is the browser that says
+ * "Version/… Safari/…" and none of the names the others add to theirs: Chrome,
+ * Edge, Opera and every other Chromium say "Chrome/" or "Chromium/", Firefox
+ * says "Firefox/", and on iOS the third-party browsers say "CriOS/", "FxiOS/",
+ * "EdgiOS/".
+ *
+ * iPhone and iPad are excluded: their print sheet has no PDF menu, so the hint
+ * would be wrong there. An iPad asks for desktop sites with a Mac user agent,
+ * so a Mac user agent on a touch screen is an iPad, which is what
+ * `maxTouchPoints` is for (a Mac reports 0).
+ */
+export function isMacSafari(userAgent: string, maxTouchPoints = 0): boolean {
+  if (!/\bMacintosh\b/.test(userAgent)) return false;
+  if (maxTouchPoints > 1) return false;
+  if (!/\bVersion\/[\d.]+.*\bSafari\/[\d.]+/.test(userAgent)) return false;
+  return !/\b(?:Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|Firefox|FxiOS)\//.test(userAgent);
+}
+
+/**
  * The line printed at the top of a multi-message job, describing exactly what
  * the artifact contains. A printed exhibit should be self-describing: whoever
  * reads it later did not watch it being produced.

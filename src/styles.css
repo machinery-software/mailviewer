@@ -1076,6 +1076,17 @@ pre.code .hl { color: var(--accent); }
 }
 .printmenu-pop button:last-child { border-bottom: 0; }
 .printmenu-pop button:hover { background: var(--card); color: var(--ink); }
+/* Safari only: where its print sheet keeps Save as PDF. Fine print, so --ink3,
+   which passes AA on --bg2. */
+.printmenu-hint {
+  margin: 0;
+  padding: 8px 14px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink3);
+  /* One line: the popover widens to fit rather than breaking "PDF ▸ Save as PDF". */
+  white-space: nowrap;
+}
 
 /*
  * The printable document.

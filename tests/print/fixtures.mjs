@@ -1,6 +1,8 @@
 // Mail fixtures are BUILT here rather than committed, because .gitignore refuses
 // to track *.eml/*.mbox at all -- a deliberate guard against a real mail file
 // ever landing in the repo by accident. Same approach as cfbBuilder.ts.
+import { Buffer } from "node:buffer";
+import { deflateSync } from "node:zlib";
 
 /** A 1x1 transparent PNG, small enough to inline. */
 const PNG_1PX =
@@ -253,5 +255,108 @@ export function viewportSizedEml(kind = "vh", paragraphs = 40, marker = "VIEWPOR
     "Content-Type: text/html; charset=utf-8",
     "",
     `${wrapper}${body}<p>${marker}</p></div>`,
+  ].join("\r\n");
+}
+
+// --- What a printed PDF contains ----------------------------------------------
+
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc32 = (bytes) => {
+  let c = 0xffffffff;
+  for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+
+/** A solid-colour PNG big enough to see on a printed page. */
+function solidPng(width, height, [r, g, b]) {
+  const be32 = (n) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+  const chunk = (type, data) => {
+    const body = [...Buffer.from(type, "latin1"), ...data];
+    return [...be32(data.length), ...body, ...be32(crc32(body))];
+  };
+  const row = [0, ...Array.from({ length: width }, () => [r, g, b]).flat()];
+  const raw = Buffer.from(Array.from({ length: height }, () => row).flat());
+  return Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ...chunk("IHDR", [...be32(width), ...be32(height), 8, 2, 0, 0, 0]),
+    ...chunk("IDAT", [...deflateSync(raw)]),
+    ...chunk("IEND", []),
+  ]);
+}
+
+/**
+ * One message carrying everything a printed PDF might or might not include:
+ * From, To (two), Cc, Bcc, Reply-To, Subject, Date, an HTML body, an inline
+ * image by Content-ID, and two attachments whose bytes carry markers that
+ * must never appear on paper. The answers in the Safari-hint PR, and the claims
+ * a guide makes about the PDF, are checked against this.
+ */
+export const PDF_CONTENTS = {
+  subject: "PDF contents check 0417",
+  from: "Adjuster <adjuster@fixture.invalid>",
+  to: ["Counsel <counsel@fixture.invalid>", "Second Counsel <second@fixture.invalid>"],
+  cc: "Broker <broker@fixture.invalid>",
+  bcc: "Hidden Reader <bcc-only@fixture.invalid>",
+  replyTo: "Claims Desk <reply-only@fixture.invalid>",
+  date: "Tue, 3 Jun 2025 09:14:00 -0400",
+  bodyMarker: "PDF-CONTENTS-BODY-END-MARKER",
+  imageAlt: "Inline chart 0417",
+  attachments: ["schedule.txt", "survey.pdf"],
+  attachmentMarkers: ["ATTACHED-TEXT-BYTES-MUST-NOT-PRINT", "ATTACHED-PDF-BYTES-MUST-NOT-PRINT"],
+};
+
+export function pdfContentsEml() {
+  const c = PDF_CONTENTS;
+  const mixed = "----=_fixture_mixed";
+  const related = "----=_fixture_related_pdf";
+  const png = solidPng(240, 120, [0xd9, 0x35, 0x2b]).toString("base64").replace(/.{76}/g, "$&\r\n");
+  const b64 = (s) => Buffer.from(s).toString("base64");
+  return [
+    `From: ${c.from}`,
+    `To: ${c.to.join(", ")}`,
+    `Cc: ${c.cc}`,
+    `Bcc: ${c.bcc}`,
+    `Reply-To: ${c.replyTo}`,
+    `Subject: ${c.subject}`,
+    `Date: ${c.date}`,
+    "Message-ID: <pdf-contents-0417@fixture.invalid>",
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${mixed}"`,
+    "",
+    `--${mixed}`,
+    `Content-Type: multipart/related; boundary="${related}"`,
+    "",
+    `--${related}`,
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    `<div><p>The surveyor's schedule is attached.</p>` +
+      `<p><img src="cid:chart0417@fixture.invalid" width="240" height="120" alt="${c.imageAlt}"></p>` +
+      `<p>${c.bodyMarker}</p></div>`,
+    `--${related}`,
+    "Content-Type: image/png",
+    "Content-Transfer-Encoding: base64",
+    "Content-ID: <chart0417@fixture.invalid>",
+    "Content-Disposition: inline; filename=chart.png",
+    "",
+    png,
+    `--${related}--`,
+    `--${mixed}`,
+    'Content-Type: text/plain; charset=utf-8; name="schedule.txt"',
+    'Content-Disposition: attachment; filename="schedule.txt"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(`Readings schedule.\n${c.attachmentMarkers[0]}\n`),
+    `--${mixed}`,
+    'Content-Type: application/pdf; name="survey.pdf"',
+    'Content-Disposition: attachment; filename="survey.pdf"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    b64(`%PDF-1.4\n% ${c.attachmentMarkers[1]}\n%%EOF\n`),
+    `--${mixed}--`,
+    "",
   ].join("\r\n");
 }
