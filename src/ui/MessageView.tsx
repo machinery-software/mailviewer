@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Address, Attachment, Message } from "../lib/model";
 import { buildIframeDocument, sanitizeMessageHtml } from "../lib/sanitize";
 import { countMatches, highlight, highlightHtml } from "../lib/highlight";
-import { type PrintScope, listScopeLabel } from "../lib/printing";
+import { type PrintScope, SAFARI_PDF_HINT, isMacSafari, listScopeLabel } from "../lib/printing";
 
 type Tab = "message" | "headers" | "source";
 
@@ -70,6 +70,8 @@ export default function MessageView({
   printReady: Record<PrintScope, boolean>;
 }) {
   const [tab, setTab] = useState<Tab>("message");
+  // Read once, locally; nothing about the browser leaves the page.
+  const macSafari = useMemo(() => isMacSafari(navigator.userAgent, navigator.maxTouchPoints), []);
 
   useEffect(() => setTab("message"), [message.id]);
 
@@ -198,6 +200,8 @@ export default function MessageView({
                   {!printReady[scope] && <span className="printmenu-wait">Preparing…</span>}
                 </button>
               ))}
+              {/* Safari's print sheet hides Save as PDF in its PDF menu. */}
+              {macSafari && <p className="printmenu-hint">{SAFARI_PDF_HINT}</p>}
             </div>
           </details>
         </div>

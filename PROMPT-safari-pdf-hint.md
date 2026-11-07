@@ -1,0 +1,17 @@
+# Brief (7 November 2026): Safari "Save as PDF" hint and PDF contents check
+
+PR 2 of three (after MAC-513, before the SEO pass). Branch from main, own PR, do not merge or promote. Nothing may add a network request, a tracker or a third-party script; the CSP and the no-transform header stay exactly as they are.
+
+The print menu's "Print or save as PDF" works in every browser, but Safari's print sheet hides Save as PDF under the PDF menu at the bottom-left.
+
+1. When the browser is Safari (user-agent check, local only, nothing sent anywhere), show one muted line under that menu item: "In the print sheet, choose PDF ▸ Save as PDF." No hint in other browsers.
+2. Report, with a sample PDF from each of Safari, Chrome and Firefox: does it include the full headers (From, To, Cc, Date, Subject), the body, inline images, and the attachment list? Does it include attachment contents (it should not)? Add a print-suite assertion for headers and attachment list if one doesn't exist.
+3. PR body: the three PDFs and the answers. A marketing guide will quote what the PDF contains, so be exact.
+
+## Findings (7 November)
+
+- "Safari" means Safari on a Mac. iPhone and iPad print sheets have no PDF menu; an iPad in desktop mode sends a Mac user agent and is told apart by navigator.maxTouchPoints. Both are read in the page and never leave it.
+- What a printed message contains (Chrome 156 and Firefox 153 PDFs; WebKit checked on the print document under print media): the app's line "mailviewer · Build <version> (<commit>). Printed <date>."; the subject as a heading; From; To (every recipient); Cc when there is one; Date, in the browser's locale and time zone; "Sent by" when a different sender submitted it; "Attached" with the file names of non-inline attachments, comma-separated, no sizes; the body as rendered (sanitised HTML, or plain text); inline images. Not included: Bcc, Reply-To, Message-ID or any other header; attachment contents (no bytes, no embedded files: zero /EmbeddedFile or /FileAttachment objects); remote images (stripped before rendering, on screen and on paper).
+- Browser-added headers and footers (page title, URL, page numbers, date) come from the browser's print setting, not the app: Firefox's run added them; Playwright's Chrome PDF has them off. MAC-523 already covers suppressing them.
+- No Safari PDF could be produced here without either showing a window on David's screen or enabling Safari's Allow Remote Automation; a headless WKWebView reports visibilityState "hidden", never runs requestAnimationFrame, and the print document never finishes measuring. WebKit is checked on the print document instead; the Safari PDF is a device check for David.
+- Defect found, not fixed here (no ticket could be created from this session; text below): a short message prints on three pages. The body frame is measured inside a page-tall viewport (PRINT_PAGE_HEIGHT_PX, 1032px) so that 100vh bodies measure as a page, but documentElement.scrollHeight never drops below the viewport, so every body measures at least 1032px. For the test message the content ends at 258px. A frame a page tall cannot fit under the headers, moves to page 2 and spills a blank page 3. Seen in Chrome and Firefox. Fix direction: measure the content's real extent and keep the page-tall viewport only for bodies that size themselves against it; acceptance is one page for a short message with the viewport-sized-body tests still passing.
