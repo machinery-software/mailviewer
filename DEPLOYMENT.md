@@ -89,6 +89,23 @@ therefore no code doing a www→apex redirect or stamping headers. Headers come
 from `public/_headers` (copied to `dist/_headers` at build time), which
 Cloudflare's static-asset serving applies.
 
+### Not found is a 404
+
+`wrangler.jsonc` sets `assets.not_found_handling` to `"404-page"`: a path that
+is not a file gets `dist/404.html` with status 404. It was
+`"single-page-application"` until the SEO pass (7 November 2026), which
+answered `/robots.txt`, `/sitemap.xml` and every mistyped address with the app
+and a 200. The app's routes are all hashes on `/` (`#/open`, `#/privacy`, …),
+so `/` is the only path it needs.
+
+`npm run build` is `vite build` followed by `scripts/build-static.mjs`, which
+renders the home page into `dist/index.html` (so a crawler that runs no
+JavaScript reads the page; the app mounts over it), writes the guides under
+`dist/guides/`, `dist/404.html` and `dist/sitemap.xml`. It reads no clock and
+no network: two builds of one commit are still byte-identical (§5).
+`tests/print/seo.test.mjs` checks all of it against `wrangler dev`, which is
+Cloudflare's own asset handling run locally.
+
 ---
 
 ## 2. Custom domain
@@ -627,7 +644,8 @@ page. §7 has the detail.
 ### 5. Confirm, with a browser User-Agent
 
 ```bash
-scripts/check-apex.sh      # / and /mac/ with Safari's UA: no beacon, Cache-Control has no-transform
+scripts/check-apex.sh      # / and /mac/ with Safari's UA: no beacon, Cache-Control has no-transform;
+                           # robots.txt is text/plain and unedited, sitemap.xml is XML, an unknown path is a 404
 ```
 
 Or by hand:

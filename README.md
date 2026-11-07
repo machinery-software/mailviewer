@@ -100,7 +100,12 @@ has the history.
 
 ```
 public/_headers            The privacy guarantee. Read this first.
-scripts/check-apex.sh      Asks the live site, as a browser, whether the edge rewrote it.
+scripts/check-apex.sh      Asks the live site, as a browser, whether the edge rewrote it,
+                           and whether robots.txt, sitemap.xml and 404s are as built.
+scripts/build-static.mjs   After vite build: the home page prerendered into index.html,
+                           the guides, 404.html and sitemap.xml.
+src/site/                  The static pages' record (titles, descriptions, JSON-LD),
+                           the guides, and the template they are built from.
 scripts/release.mjs        preview / promote / status: tagged versions, and MATCH or BEHIND.
 src/lib/model.ts           The one message shape every parser targets.
 src/lib/sanitize.ts        HTML sanitisation + tracking-pixel neutralisation.

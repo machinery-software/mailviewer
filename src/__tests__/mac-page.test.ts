@@ -42,7 +42,11 @@ const siteLinks = { ...MAC_PURCHASE_LINKS.site };
 
 describe("the Mac purchase page", () => {
   it("runs no script and no inline handler", () => {
-    expect(html).not.toMatch(/<script/i);
+    // One data block, the JSON-LD (src/__tests__/seo.test.ts holds it to
+    // mac-pricing.ts). A browser never runs it; anything else is a script.
+    const blocks = html.match(/<script[^>]*>/gi) ?? [];
+    expect(blocks).toEqual(['<script type="application/ld+json">']);
+    expect(html.replace(/<script type="application\/ld\+json">[^]*?<\/script>/, "")).not.toMatch(/<script/i);
     expect(html).not.toMatch(/\son[a-z]+\s*=/i);
     expect(html).not.toMatch(/javascript:/i);
   });
@@ -51,7 +55,11 @@ describe("the Mac purchase page", () => {
     expect(html).not.toMatch(/\ssrc\s*=\s*["']?(https?:)?\/\//i);
     expect(html).not.toMatch(/url\(\s*["']?(https?:)?\/\//i);
     expect(html).not.toMatch(/@import/i);
-    for (const link of html.matchAll(/<link[^>]*>/gi)) expect(link[0]).toMatch(/href="\/[^/]/);
+    // A canonical link names this page's address; nothing loads it.
+    for (const link of html.matchAll(/<link[^>]*>/gi)) {
+      if (link[0].startsWith('<link rel="canonical"')) continue;
+      expect(link[0]).toMatch(/href="\/[^/]/);
+    }
     expect(html).not.toMatch(/<(iframe|object|embed|form)\b/i);
   });
 
@@ -162,9 +170,10 @@ describe("the Mac purchase page", () => {
       expect(style).toContain(".price-block{margin:0}");
       expect(style).toMatch(/\.per-mac\{display:block;margin-top:6px;font-size:14px;line-height:1\.45;[^}]*color:var\(--ink2\)\}/);
       expect(style).toContain(".site-per-mac{margin:-8px 0 0;color:#AFC0D6}");
-      // The description and the FAQ carry no price, so there is nothing there to go stale.
+      // The description and the FAQ carry no price, so there is nothing there to
+      // go stale. The JSON-LD does, and src/__tests__/seo.test.ts holds it to
+      // mac-pricing.ts.
       expect(html.match(/<meta name="description" content="([^"]*)"/)?.[1]).not.toMatch(/\$|one-time|year/);
-      expect(html).not.toContain("application/ld+json");
     });
   });
 

@@ -7,9 +7,13 @@
   // there is no Worker script: Cloudflare serves the files in ./dist directly
   // from its edge cache. No server-side code runs on any request, so there is
   // no server-side code that *could* receive your mail even in principle.
+  // A path that is not a file gets dist/404.html with status 404. The app's
+  // routes are all hashes on / (#/open, #/privacy, ...), so / is the only path
+  // it serves, and "single-page-application" -- index.html with 200 for every
+  // path -- answered /robots.txt, /sitemap.xml and every typo with the app.
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "404-page"
   },
 
   "observability": {

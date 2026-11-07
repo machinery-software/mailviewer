@@ -70,9 +70,50 @@ for url in "${PAGES[@]}"; do
   fi
 done
 
+# The files crawlers read, and a path that is not a page. The zone can change
+# these too: Cloudflare's managed robots.txt rewrites robots.txt at the edge,
+# and the old single-page-application handling answered all three with the
+# app and a 200.
+fetch_as() { curl -sS -A "$1" -D "$tmp/headers" -o "$tmp/body" "$2"; }
+field() { grep -i "^$1:" "$tmp/headers" | tr -d '\r' | sed -E 's/^[^:]+:[[:space:]]*//'; }
+code() { head -1 "$tmp/headers" | tr -d '\r' | awk '{print $2}'; }
+
+echo "== $BASE/robots.txt"
+if fetch_as "$UA" "$BASE/robots.txt"; then
+  ct="$(field content-type)"
+  if [ "$(code)" = 200 ] && printf '%s' "$ct" | grep -qi '^text/plain'; then echo "  ok    200 $ct"; else echo "  FAIL  $(code) $ct"; fail=1; fi
+  if grep -qx "Sitemap: $BASE/sitemap.xml" "$tmp/body" || grep -qx "Sitemap: https://mailviewer.app/sitemap.xml" "$tmp/body"; then
+    echo "  ok    names the sitemap"
+  else
+    echo "  FAIL  no Sitemap: line for $BASE/sitemap.xml"; fail=1
+  fi
+  if [ "$(grep -Ecv '^(#.*|User-agent: \*|Allow: /|Sitemap: .*)?$' "$tmp/body")" -ne 0 ]; then
+    echo "  FAIL  robots.txt has lines we did not write (managed robots.txt?):"
+    grep -Ev '^(#.*|User-agent: \*|Allow: /|Sitemap: .*)?$' "$tmp/body" | head -3 | sed 's/^/        /'
+    fail=1
+  fi
+else
+  echo "  FAIL  could not fetch"; fail=1
+fi
+
+echo "== $BASE/sitemap.xml"
+if fetch_as "$UA" "$BASE/sitemap.xml"; then
+  ct="$(field content-type)"
+  if [ "$(code)" = 200 ] && printf '%s' "$ct" | grep -qi 'xml' && grep -q '<urlset' "$tmp/body"; then echo "  ok    200 $ct"; else echo "  FAIL  $(code) $ct"; fail=1; fi
+else
+  echo "  FAIL  could not fetch"; fail=1
+fi
+
+echo "== $BASE/no-such-page-check-apex"
+if fetch_as "$UA" "$BASE/no-such-page-check-apex"; then
+  if [ "$(code)" = 404 ]; then echo "  ok    404"; else echo "  FAIL  $(code): an unknown path should be a 404"; fail=1; fi
+else
+  echo "  FAIL  could not fetch"; fail=1
+fi
+
 echo
 if [ "$fail" -ne 0 ]; then
   echo "FAIL: the apex is not serving the site as built. See DEPLOYMENT.md §5a."
   exit 1
 fi
-echo "OK: no injected script, and every HTML response is marked no-transform."
+echo "OK: no injected script, every HTML response is marked no-transform, and robots.txt, sitemap.xml and 404s are as built."

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { setPendingFiles } from "../lib/pendingFiles";
 import { COMPANY_NAME, COMPANY_URL } from "../config";
+import { type Guide, guidePage, publishedGuides } from "../site/guides";
 import { Footer } from "./Footer";
 import { Logo } from "./Logo";
 
@@ -17,7 +18,8 @@ const FORMATS = [
 
 const ACCEPT = ".eml,.emlx,.msg,.oft,.mbox,.mbx,.pst,.ost,.olm,.mht,.mhtml,message/rfc822";
 
-export default function Landing() {
+/** `guides` is for tests; the page lists the published ones (src/site/guides.ts). */
+export default function Landing({ guides = publishedGuides() }: { guides?: Guide[] }) {
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -187,6 +189,22 @@ export default function Landing() {
           </a>
         </div>
       </section>
+
+      {/* Only once there is a published guide; until then the section is absent. */}
+      {guides.length > 0 && (
+        <section className="section guides">
+          <h2>Guides</h2>
+          <h3>How to open what you have been sent</h3>
+          <ul className="guide-list">
+            {guides.map((g) => (
+              <li key={g.slug}>
+                <a href={guidePage(g).path}>{g.title}</a>
+                <span>{g.description}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <Footer note="A static site. No server, no accounts, no analytics." />
     </>
