@@ -10,6 +10,11 @@
  * bodies are XML-escaped. Attachments are declared inside the XML but their
  * bytes live as separate ZIP entries, referenced by an `OPFAttachmentURL` path.
  *
+ * Outlook 2016 and later name the message directory "com.microsoft.__Messages"
+ * rather than "Message":
+ *
+ *   Accounts/<account>/com.microsoft.__Messages/<folder>/message_00000.xml
+ *
  * Two things about this format are genuinely under-specified, so both are done
  * defensively rather than assumed (see the comments at each site):
  *   - the exact directory layout, which has drifted across Outlook versions, and
@@ -18,10 +23,20 @@
  * The whole value of an archive format is its folder tree, so this reconstructs
  * a real nested Folder hierarchy from the entry paths rather than flattening.
  *
- * Runs in a Web Worker: DOMParser and fflate are both available there. No Node
- * APIs, no network.
+ * Runs where the parsers run: the browser's parse Web Worker, and the Mac app's
+ * parse service on bare JavaScriptCore. Neither has DOMParser, document or
+ * window, so the XML is read by ./xml.ts and the ZIP by ./zip.ts, both plain
+ * ECMAScript. An earlier version called DOMParser, passed its tests in jsdom,
+ * and failed on every real .olm (MAC-513). No Node APIs, no network.
+ *
+ * The ZIP is never unzipped whole: the archive's index is read first, then one
+ * message's XML at a time, and an attachment's bytes only when a message names
+ * them.
  */
-import { unzip } from "fflate";
+import { descendants, firstDescendant, parseXml, textContent, XmlError } from "./xml.ts";
+import type { XmlElement } from "./xml.ts";
+import { readZipEntry, readZipIndex, ZipError } from "./zip.ts";
+import type { ZipEntry } from "./zip.ts";
 import type {
   Address,
   Attachment,
@@ -31,12 +46,13 @@ import type {
   ProgressFn,
 } from "../model.ts";
 
-type Entries = Record<string, Uint8Array>;
-
-function unzipAsync(bytes: Uint8Array): Promise<Entries> {
-  return new Promise((resolve, reject) => {
-    unzip(bytes, (err, data) => (err ? reject(err) : resolve(data)));
-  });
+/** The archive's index, and a way to read any one entry from it on demand. */
+export interface OlmIndex {
+  file: Blob;
+  entries: ZipEntry[];
+  byName: Map<string, ZipEntry>;
+  /** The entries that hold message XML, in archive order. */
+  messageEntries: ZipEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -44,20 +60,20 @@ function unzipAsync(bytes: Uint8Array): Promise<Entries> {
 // ---------------------------------------------------------------------------
 
 /** First descendant element with the given tag name, or null. */
-function child(el: Element | Document, tag: string): Element | null {
-  return el.getElementsByTagName(tag)[0] ?? null;
+function child(el: XmlElement, tag: string): XmlElement | null {
+  return firstDescendant(el, tag);
 }
 
 /** Trimmed text content of the first `tag` under `el`, or undefined. */
-function text(el: Element | Document, tag: string): string | undefined {
+function text(el: XmlElement, tag: string): string | undefined {
   const found = child(el, tag);
-  const value = found?.textContent?.trim();
+  const value = found ? textContent(found).trim() : "";
   return value ? value : undefined;
 }
 
 /** Read an attribute whose name matches `pattern`, case-insensitively. */
-function attr(el: Element, pattern: RegExp): string | undefined {
-  for (const a of Array.from(el.attributes)) {
+function attr(el: XmlElement, pattern: RegExp): string | undefined {
+  for (const a of el.attributes) {
     if (pattern.test(a.name)) {
       const v = a.value.trim();
       if (v) return v;
@@ -73,10 +89,10 @@ function attr(el: Element, pattern: RegExp): string | undefined {
  * name ends in "Address"/"Name" so a version that spells them differently still
  * yields something.
  */
-function addresses(el: Element | null): Address[] {
+function addresses(el: XmlElement | null): Address[] {
   if (!el) return [];
-  const nodes = el.getElementsByTagName("emailAddress");
-  const list = nodes.length ? Array.from(nodes) : [el];
+  const nodes = descendants(el, "emailAddress");
+  const list = nodes.length ? nodes : [el];
   const out: Address[] = [];
   for (const node of list) {
     const email = attr(node, /EmailAddressAddress$/i) ?? attr(node, /Address$/i);
@@ -87,7 +103,7 @@ function addresses(el: Element | null): Address[] {
   return out;
 }
 
-function firstAddress(el: Element | null): Address | undefined {
+function firstAddress(el: XmlElement | null): Address | undefined {
   return addresses(el)[0];
 }
 
@@ -105,9 +121,23 @@ function firstAddress(el: Element | null): Address | undefined {
  * "1a" would be misread, which is the documented risk of a format with no
  * manifest; every other case is handled correctly.
  */
+const MESSAGES_DIR = /^(?:messages?|com\.microsoft\.__messages)$/i;
+const ATTACHMENTS_DIR = /^(?:attachments?|com\.microsoft\.__attachments)$/i;
+
+/**
+ * Is this entry a message's XML? It is an .xml under a message directory and
+ * not under an attachments directory -- an attached .xml file is not a message.
+ */
+function isMessageEntry(entryPath: string): boolean {
+  if (!/\.xml$/i.test(entryPath)) return false;
+  const segs = entryPath.split("/").filter(Boolean).slice(0, -1);
+  const msgIdx = segs.findIndex((s) => MESSAGES_DIR.test(s));
+  return msgIdx !== -1 && !segs.slice(msgIdx + 1).some((s) => ATTACHMENTS_DIR.test(s));
+}
+
 function folderPathFor(entryPath: string): string[] {
   const segs = entryPath.split("/").filter(Boolean);
-  const msgIdx = segs.findIndex((s) => /^messages?$/i.test(s));
+  const msgIdx = segs.findIndex((s) => MESSAGES_DIR.test(s));
   const rel = msgIdx === -1 ? segs.slice(0, -1) : segs.slice(msgIdx + 1, -1);
   if (rel.length && /^[0-9a-f]{1,2}$/i.test(rel[rel.length - 1])) rel.pop();
   return rel;
@@ -123,7 +153,7 @@ function folderPathFor(entryPath: string): string[] {
  * not match the entry table. Try the obvious keys, then fall back to matching by
  * suffix and finally by basename.
  */
-function resolveAttachment(entries: Entries, url: string): Uint8Array | undefined {
+function resolveAttachment(index: OlmIndex, url: string): ZipEntry | undefined {
   const candidates = new Set<string>([url, url.replace(/^\/+/, "")]);
   try {
     candidates.add(decodeURIComponent(url));
@@ -133,35 +163,38 @@ function resolveAttachment(entries: Entries, url: string): Uint8Array | undefine
   }
 
   for (const key of candidates) {
-    if (entries[key]) return entries[key];
+    const hit = index.byName.get(key);
+    if (hit) return hit;
   }
 
-  const keys = Object.keys(entries);
   const norm = url.replace(/^\/+/, "").toLowerCase();
-  const bySuffix = keys.find((k) => k.toLowerCase().endsWith(norm));
-  if (bySuffix) return entries[bySuffix];
+  const bySuffix = index.entries.find((e) => e.name.toLowerCase().endsWith(norm));
+  if (bySuffix) return bySuffix;
 
   const base = norm.split("/").pop();
   if (base) {
-    const byBase = keys.find((k) => k.toLowerCase().endsWith(`/${base}`) || k.toLowerCase() === base);
-    if (byBase) return entries[byBase];
+    const byBase = index.entries.find(
+      (e) => e.name.toLowerCase().endsWith(`/${base}`) || e.name.toLowerCase() === base,
+    );
+    if (byBase) return byBase;
   }
 
   return undefined;
 }
 
-function extractAttachments(
-  email: Element,
-  entries: Entries,
+async function extractAttachments(
+  email: XmlElement,
+  index: OlmIndex,
   id: string,
   warnings: string[],
-): Attachment[] {
+): Promise<Attachment[]> {
   const list = child(email, "OPFMessageCopyAttachmentList");
   if (!list) return [];
 
   const out: Attachment[] = [];
-  const nodes = list.getElementsByTagName("messageAttachment");
-  Array.from(nodes).forEach((node, i) => {
+  const nodes = descendants(list, "messageAttachment");
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
     const url = attr(node, /^OPFAttachmentURL$/i) ?? attr(node, /URL$/i);
     const name = attr(node, /^OPFAttachmentName$/i) ?? attr(node, /Name$/i) ?? `attachment-${i + 1}`;
     const mime =
@@ -169,12 +202,19 @@ function extractAttachments(
     const cid = attr(node, /ContentID$/i)?.replace(/^<|>$/g, "");
 
     // Some rows are inline placeholders with no URL; skip them silently.
-    if (!url) return;
+    if (!url) continue;
 
-    const content = resolveAttachment(entries, url);
-    if (!content) {
+    const entry = resolveAttachment(index, url);
+    if (!entry) {
       warnings.push(`Attachment "${name}" referenced ${url}, which is not in the archive.`);
-      return;
+      continue;
+    }
+    let content: Uint8Array;
+    try {
+      content = await readZipEntry(index.file, entry);
+    } catch (err) {
+      warnings.push(`Attachment "${name}" could not be read: ${errText(err)}`);
+      continue;
     }
 
     out.push({
@@ -187,7 +227,7 @@ function extractAttachments(
       inline: !!cid && /^image\//i.test(mime),
       content,
     });
-  });
+  }
 
   return out;
 }
@@ -202,15 +242,15 @@ function parseDate(value: string | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function buildMessage(
-  email: Element,
-  entries: Entries,
+async function buildMessage(
+  email: XmlElement,
+  index: OlmIndex,
   id: string,
   folderPath: string[],
   rawXml: Uint8Array,
   warnings: string[],
-): Message {
-  const attachments = extractAttachments(email, entries, id, warnings);
+): Promise<Message> {
+  const attachments = await extractAttachments(email, index, id, warnings);
 
   const from =
     firstAddress(child(email, "OPFMessageCopyFromAddresses")) ??
@@ -296,8 +336,70 @@ function buildFolderTree(
 }
 
 // ---------------------------------------------------------------------------
-// Entry point
+// Entry points
 // ---------------------------------------------------------------------------
+
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+const utf8 = new TextDecoder("utf-8");
+
+/**
+ * Read the archive's index: every entry's name, size and position, and which
+ * of them are messages. Reads only the end of the file.
+ */
+export async function openOlm(file: Blob): Promise<OlmIndex> {
+  let entries: ZipEntry[];
+  try {
+    entries = await readZipIndex(file);
+  } catch (err) {
+    if (!(err instanceof ZipError)) throw err;
+    throw new Error(
+      `This .olm is incomplete or damaged (${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}). ` +
+        "A file cut short while copying or downloading looks like this. Copy it again from the Mac " +
+        "that exported it, or export it again from Outlook (File > Export).",
+    );
+  }
+  const byName = new Map(entries.map((e) => [e.name, e]));
+  // Message XML files live under a message directory. Discover them by shape
+  // rather than by a fixed path, since the layout drifts between versions.
+  const messageEntries = entries.filter((e) => isMessageEntry(e.name));
+  return { file, entries, byName, messageEntries };
+}
+
+/**
+ * Read the messages in one message entry. One XML file can hold one or several
+ * <email> elements. `firstId` numbers them. Throws when the entry cannot be
+ * read or is not well-formed XML; a damaged attachment is only a warning.
+ */
+export async function readOlmMessages(
+  index: OlmIndex,
+  entry: ZipEntry,
+  firstId: number,
+  warnings: string[],
+): Promise<Message[]> {
+  const rawXml = await readZipEntry(index.file, entry);
+  let root: XmlElement;
+  try {
+    root = parseXml(utf8.decode(rawXml));
+  } catch (err) {
+    if (err instanceof XmlError) throw new Error(`Malformed XML at ${entry.name}: ${err.message}`);
+    throw err;
+  }
+  const emails = root.name === "email" ? [root] : descendants(root, "email");
+  const folderPath = folderPathFor(entry.name);
+  const out: Message[] = [];
+  for (let j = 0; j < emails.length; j++) {
+    const id = `msg-${firstId + out.length}`;
+    try {
+      out.push(await buildMessage(emails[j], index, id, folderPath, rawXml, warnings));
+    } catch (err) {
+      warnings.push(`Skipped a message in ${entry.name} (#${j + 1}): ${errText(err)}`);
+    }
+  }
+  return out;
+}
 
 export async function parseOlm(
   file: Blob,
@@ -306,66 +408,52 @@ export async function parseOlm(
 ): Promise<ParsedArchive> {
   const warnings: string[] = [];
 
-  onProgress?.({ phase: "Unpacking archive", fraction: 0, messagesFound: 0 });
+  onProgress?.({ phase: "Reading the archive's index", fraction: null, messagesFound: 0 });
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const entries = await unzipAsync(bytes);
+  const index = await openOlm(file);
+  const keys = index.messageEntries;
 
-  // Message XML files live under a "Message" segment. Discover them by shape
-  // rather than by a fixed path, since the layout drifts between versions.
-  const xmlKeys = Object.keys(entries).filter(
-    (k) => /\.xml$/i.test(k) && /\/messages?\//i.test(`/${k}`),
-  );
+  if (keys.length === 0) {
+    throw new Error(
+      "No messages found: this .olm archive has no message XML under a Message folder.",
+    );
+  }
 
-  const parser = new DOMParser();
   const messages: Message[] = [];
   const placed: Array<{ path: string[]; id: string }> = [];
+  let unreadable = 0;
+  let firstProblem = "";
 
-  for (let i = 0; i < xmlKeys.length; i++) {
-    const key = xmlKeys[i];
-    const rawXml = entries[key];
-    let doc: Document;
+  for (let i = 0; i < keys.length; i++) {
+    const entry = keys[i];
     try {
-      doc = parser.parseFromString(new TextDecoder("utf-8").decode(rawXml), "application/xml");
-    } catch {
-      warnings.push(`Could not read XML at ${key}.`);
-      continue;
-    }
-    if (doc.getElementsByTagName("parsererror").length > 0) {
-      warnings.push(`Malformed XML at ${key}; skipped.`);
-      continue;
-    }
-
-    // One XML file can hold one or several <email> elements.
-    const emails = Array.from(doc.getElementsByTagName("email"));
-    if (emails.length === 0) continue;
-
-    const folderPath = folderPathFor(key);
-    emails.forEach((email, j) => {
-      const id = `msg-${messages.length}`;
-      try {
-        const message = buildMessage(email, entries, id, folderPath, rawXml, warnings);
-        messages.push(message);
-        placed.push({ path: folderPath, id });
-      } catch (err) {
-        warnings.push(
-          `Skipped a message in ${key} (#${j + 1}): ${err instanceof Error ? err.message : String(err)}`,
-        );
+      const found = await readOlmMessages(index, entry, messages.length, warnings);
+      for (const m of found) {
+        messages.push(m);
+        placed.push({ path: m.folderPath, id: m.id });
       }
-    });
+    } catch (err) {
+      unreadable++;
+      const problem = err instanceof ZipError ? `Could not read ${entry.name}: ${err.message}` : errText(err);
+      firstProblem ||= problem;
+      warnings.push(`${problem}; skipped.`);
+    }
 
-    if (i % 25 === 0 || i === xmlKeys.length - 1) {
+    if (i % 25 === 0 || i === keys.length - 1) {
       onProgress?.({
         phase: "Reading messages",
-        fraction: xmlKeys.length ? (i + 1) / xmlKeys.length : null,
+        fraction: (i + 1) / keys.length,
         messagesFound: messages.length,
       });
     }
   }
 
-  if (messages.length === 0 && xmlKeys.length === 0) {
+  // Damage to some messages is a warning; damage to all of them is an archive
+  // that did not open, and saying so beats an empty folder tree.
+  if (messages.length === 0 && unreadable > 0) {
     throw new Error(
-      "No messages found: this .olm archive has no message XML under a Message folder.",
+      `None of the ${unreadable.toLocaleString("en-US")} message ${unreadable === 1 ? "file" : "files"} ` +
+        `in this .olm could be read. The first problem: ${firstProblem}`,
     );
   }
 

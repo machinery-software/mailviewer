@@ -58,6 +58,8 @@ describe("detectFormat", () => {
     expect(detectFormat(zip, "backup.olm")).toBe("olm");
     // A bare ZIP of something else is not an archive we claim to read.
     expect(detectFormat(zip, "photos.zip")).toBe("eml");
+    // A damaged .olm must reach the reader that can say so, not open as mail.
+    expect(detectFormat(new Uint8Array([0x00, 0x01, 0x02, 0x03]), "cut-short.olm")).toBe("olm");
   });
 
   it("identifies an MHTML web archive as mht", () => {
