@@ -101,6 +101,102 @@ export function olm(marker = "OLM-END-MARKER", n = 30) {
   });
 }
 
+/*
+ * An .olm laid out the way Outlook for Mac 2016 and later export one, with
+ * synthetic content: a message directory named "com.microsoft.__Messages", a
+ * subfolder, attachment bytes under "com.microsoft.__Attachments" (one of them
+ * an .xml that must not be taken for a message), an inline image by Content-ID,
+ * contacts and categories alongside, and both stored and deflated entries.
+ *
+ * It is modelled on descriptions of the format, not copied from a real export:
+ * no real .olm was available to check it against (MAC-513, MAC-526). Treat a
+ * pass as "reads the layout we believe Outlook writes", not "reads Outlook".
+ */
+const PNG_1X1 = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="),
+  (c) => c.charCodeAt(0),
+);
+const PDF_BYTES = enc.encode("%PDF-1.4\n% synthetic fixture attachment\n%%EOF\n");
+
+const xmlEscape = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const ACCOUNT = "Accounts/adjuster@fixture.invalid";
+const MESSAGES = `${ACCOUNT}/com.microsoft.__Messages`;
+
+function olmEmail({ subject, html, text, attachments = "", cc = "" }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<emails>
+  <email>
+    <OPFMessageCopySubject xml:space="preserve">${xmlEscape(subject)}</OPFMessageCopySubject>
+    <OPFMessageCopyFromAddresses>
+      <emailAddress OPFContactEmailAddressAddress="adjuster@fixture.invalid" OPFContactEmailAddressName="Adjuster &amp; Co" OPFContactEmailAddressType="0"/>
+    </OPFMessageCopyFromAddresses>
+    <OPFMessageCopyToAddresses>
+      <emailAddress OPFContactEmailAddressAddress="counsel@fixture.invalid" OPFContactEmailAddressName="Counsel" OPFContactEmailAddressType="0"/>
+    </OPFMessageCopyToAddresses>${cc}
+    <OPFMessageCopySentTime>2025-06-03T13:14:00</OPFMessageCopySentTime>
+    <OPFMessageCopyReceivedTime>2025-06-03T13:15:02</OPFMessageCopyReceivedTime>
+    <OPFMessageCopyMessageID>&lt;olm-fixture-${subject.length}@fixture.invalid&gt;</OPFMessageCopyMessageID>
+    <OPFMessageGetHasHTML>1</OPFMessageGetHasHTML>${text === undefined ? "" : `
+    <OPFMessageCopyBody xml:space="preserve">${xmlEscape(text)}</OPFMessageCopyBody>`}${html === undefined ? "" : `
+    <OPFMessageCopyHTMLBody xml:space="preserve">${xmlEscape(html)}</OPFMessageCopyHTMLBody>`}${attachments}
+  </email>
+</emails>`;
+}
+
+/** .olm -- an Outlook for Mac 2016+ export (synthetic content, see above). */
+export function olmOutlook(marker = "OLM-OUTLOOK-END-MARKER", n = 30) {
+  const inbox = olmEmail({
+    subject: "Claim 4471 — surveyor's report",
+    html:
+      `<html><body><p><img src="cid:logo@fixture.invalid" alt="logo" width="1" height="1"></p>` +
+      `${paragraphs(n)}<p>${marker}</p></body></html>`,
+    text: `${paragraphs(n, (t) => t)}\n\n${marker}`,
+    cc: `
+    <OPFMessageCopyCCAddresses>
+      <emailAddress OPFContactEmailAddressAddress="broker@fixture.invalid" OPFContactEmailAddressName="Broker"/>
+    </OPFMessageCopyCCAddresses>`,
+    attachments: `
+    <OPFMessageCopyAttachmentList>
+      <messageAttachment OPFAttachmentContentID="logo@fixture.invalid" OPFAttachmentContentType="image/png" OPFAttachmentName="logo.png" OPFAttachmentURL="${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/logo.png"/>
+      <messageAttachment OPFAttachmentContentType="application/pdf" OPFAttachmentName="survey-schedule.pdf" OPFAttachmentURL="${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/survey-schedule.pdf"/>
+      <messageAttachment OPFAttachmentContentType="text/xml" OPFAttachmentName="readings.xml" OPFAttachmentURL="${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/readings.xml"/>
+    </OPFMessageCopyAttachmentList>`,
+  });
+  const claims = olmEmail({
+    subject: "Re: Claim 4471",
+    text: "Received, thank you. We will respond by Friday.",
+  });
+  return zipSync({
+    [`${MESSAGES}/Inbox/message_00000.xml`]: strToU8(inbox),
+    [`${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/logo.png`]: [PNG_1X1, { level: 0 }],
+    [`${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/survey-schedule.pdf`]: PDF_BYTES,
+    [`${MESSAGES}/Inbox/com.microsoft.__Attachments/message_00000/readings.xml`]: strToU8(
+      '<?xml version="1.0"?><readings><email>not a message</email></readings>',
+    ),
+    [`${MESSAGES}/Inbox/Claims/message_00001.xml`]: [strToU8(claims), { level: 0 }],
+    [`${ACCOUNT}/com.microsoft.__Contacts/Contacts/contact_00000.xml`]: strToU8(
+      '<?xml version="1.0" encoding="UTF-8"?><contacts><contact><OPFContactCopyDisplayName>Counsel</OPFContactCopyDisplayName></contact></contacts>',
+    ),
+    "Categories.xml": strToU8('<?xml version="1.0" encoding="UTF-8"?><categories/>'),
+  });
+}
+
+/** An .olm cut short, as a copy that ran out of disk or was interrupted would be. */
+export function olmTruncated() {
+  const whole = olmOutlook();
+  return whole.slice(0, Math.floor(whole.length * 0.6));
+}
+
+/** An .olm whose ZIP is sound but whose only message XML is not well-formed. */
+export function olmMalformed() {
+  return zipSync({
+    [`${MESSAGES}/Inbox/message_00000.xml`]: strToU8(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<emails><email><OPFMessageCopySubject>Never closed</email></emails>',
+    ),
+  });
+}
+
 // --- TNEF ------------------------------------------------------------------
 
 const TNEF_SIG = [0x78, 0x9f, 0x3e, 0x22];

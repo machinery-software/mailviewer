@@ -1,11 +1,12 @@
 /**
- * @vitest-environment jsdom
- *
  * An .olm is a ZIP of Outlook-for-Mac XML. Rather than check in a binary
  * fixture, this builds a real ZIP with fflate containing a realistic two-folder
  * layout and an attachment, then proves the folder tree, message fields and
- * attachment bytes all come back. DOMParser (used by the parser) is provided by
- * jsdom here; in production it is the Web Worker's own.
+ * attachment bytes all come back.
+ *
+ * Node environment, no jsdom: these once ran in jsdom, whose DOMParser let the
+ * parser pass here while every real .olm failed in the worker (MAC-513). The
+ * same parser in a worker thread is tested in olm.worker.test.ts.
  */
 import { describe, expect, it } from "vitest";
 import { zipSync, strToU8 } from "fflate";
@@ -154,5 +155,39 @@ describe("Outlook for Mac (.olm)", () => {
     expect(archive.messages[0].subject).toBe("Project kickoff");
     // ...and the corrupt one is reported rather than silently dropped.
     expect(archive.warnings.join(" ")).toMatch(/broken\.xml/i);
+  });
+
+  it("reads the index and then only what the messages use, never the whole file", async () => {
+    // A large entry no message refers to (an export carries plenty: calendars,
+    // contacts, other accounts' attachments). It must never be read.
+    const unrelated = new Uint8Array(2_000_000).map((_, i) => (i * 7) & 0xff);
+    const zip = zipSync({
+      "Accounts/Acme/Message/Inbox/1a/message_00001.xml": strToU8(msg1Xml),
+      "Accounts/Acme/Attachments/1a/report.pdf": PDF,
+      "Accounts/Acme/Calendar/huge.bin": [unrelated, { level: 0 }],
+    });
+    const base = blob(zip);
+    let bytesRead = 0;
+    const wrap = (b: Blob): Blob =>
+      ({
+        size: b.size,
+        slice: (start?: number, end?: number) => wrap(b.slice(start, end)),
+        arrayBuffer: async () => {
+          bytesRead += b.size;
+          return b.arrayBuffer();
+        },
+      }) as unknown as Blob;
+
+    const archive = await parseOlm(wrap(base), "x.olm");
+    expect(archive.messages[0].attachments[0].content).toEqual(PDF);
+    expect(zip.length).toBeGreaterThan(2_000_000);
+    expect(bytesRead).toBeLessThan(100_000);
+  });
+
+  it("refuses an archive in which no message could be read, rather than opening it empty", async () => {
+    const zip = zipSync({
+      "Accounts/Acme/Message/Inbox/1a/broken.xml": strToU8("<emails><email><OPFMessageCopySubject>Broken"),
+    });
+    await expect(parseOlm(blob(zip), "x.olm")).rejects.toThrow(/None of the 1 message file.*broken\.xml/);
   });
 });

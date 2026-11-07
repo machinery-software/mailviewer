@@ -3,7 +3,6 @@ import type { SourceFormat } from "../model";
 const CFB_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const PST_MAGIC = [0x21, 0x42, 0x44, 0x4e]; // "!BDN"
 const TNEF_MAGIC = [0x78, 0x9f, 0x3e, 0x22]; // 0x223E9F78, little-endian
-const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // "PK\x03\x04" -- a local file header
 // Lotus Notes .nsf/.ntf databases open with this fixed prefix. We only use it to
 // recognise the format well enough to decline it helpfully.
 const NSF_MAGIC = [0x1a, 0x00, 0x00, 0x04];
@@ -35,8 +34,10 @@ export function detectFormat(head: Uint8Array, filename: string): SourceFormat {
   // and is expanded there, but people do save the thing to disk and open it.
   if (startsWith(head, TNEF_MAGIC)) return "tnef";
   // An Outlook for Mac archive (.olm) is a ZIP. Require the extension too: a
-  // bare ZIP of anything else is not an archive we know how to read.
-  if (startsWith(head, ZIP_MAGIC) && lower.endsWith(".olm")) return "olm";
+  // bare ZIP of anything else is not an archive we know how to read. A file
+  // named .olm that is not a ZIP still goes to the .olm reader, which says it
+  // is damaged; read as an .eml it would open as one blank message.
+  if (lower.endsWith(".olm")) return "olm";
   if (startsWith(head, PST_MAGIC)) {
     return lower.endsWith(".ost") ? "ost" : "pst";
   }

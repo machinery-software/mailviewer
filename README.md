@@ -110,6 +110,10 @@ src/lib/parse/
   eml.ts  mbox.ts          RFC822 and mbox archives.
   cfb.ts  msg.ts  lzfu.ts  Outlook .msg, from scratch.
   pst/                     Outlook .pst/.ost, from scratch (MS-PST).
+  olm.ts                   Outlook for Mac .olm archives.
+  zip.ts  xml.ts           A streaming ZIP reader and a DOM-free XML reader
+                           for .olm: plain ECMAScript, because the parse
+                           worker has no DOMParser (MAC-513).
 src/worker/parse.worker.ts Parsing runs off the main thread.
 ```
 
@@ -121,6 +125,14 @@ src/worker/parse.worker.ts Parsing runs off the main thread.
 - `.pst` support is a from-scratch implementation of a large Microsoft
   specification. It handles the common Unicode PST layout; exotic or corrupt
   files may parse partially, and the viewer will say so rather than pretend.
+- `.pst` and `.ost` are not opened end to end by any automated test: the repo
+  has no PST writer and no PST fixture (MAC-526). The browser suite only shows
+  that the parse worker reaches the PST reader.
+- `.olm` is tested against generated archives laid out the way Outlook for Mac
+  is described as writing them, not against a real export (MAC-513, MAC-526).
+  The archive's index is read first and each message on its own, so a large
+  `.olm` is never unzipped whole. Times in an `.olm` carry no time zone and are
+  shown as local time; whether Outlook writes them as UTC is unverified.
 - Everything is held in memory, so a very large `.pst` is bounded by your tab's
   available RAM.
 - A message is read up to its 1,000th MIME part. Nothing a mail client sends
